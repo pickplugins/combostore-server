@@ -1,0 +1,14 @@
+{
+    "name": "pickplugins/combo-store",
+    "autoload": {
+        "psr-4": {
+            "EmailValidation\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Nur",
+            "email": "support@pickplugins.com"
+        }
+    ]
+}
