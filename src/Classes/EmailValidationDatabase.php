@@ -23,13 +23,16 @@ class EmailValidationDatabase
         global $wpdb;
         $charset_collate = $wpdb->get_charset_collate();
         $prefix = $wpdb->prefix;
-        // $table_api_keys = $prefix . 'cstore_api_keys';
-        // $table_requests = $prefix . 'cstore_api_requests';
+        $table_api_keys = $prefix . 'cstore_api_keys';
+        $table_requests = $prefix . 'cstore_api_requests';
 
         // $table_stats_counter = $prefix . 'cstore_stats_counter';
 
-        // $table_credits = $prefix . 'cstore_credits';
+        $table_credits = $prefix . 'cstore_credits';
 
+        $table_products = $prefix . 'cstore_products';
+        $table_products_cat = $prefix . 'cstore_products_cat';
+        $table_products_cat_rel = $prefix . 'cstore_products_cat_rel';
         $table_products = $prefix . 'cstore_products';
         $table_products_meta = $prefix . 'cstore_products_meta';
 
@@ -47,6 +50,9 @@ class EmailValidationDatabase
 
         $table_downloads = $prefix . 'cstore_downloads';
         $table_downloads_meta = $prefix . 'cstore_downloads_meta';
+
+        $table_terms = $prefix . 'cstore_terms';
+        $table_terms_meta = $prefix . 'cstore_terms_meta';
 
         $table_refunds = $prefix . 'cstore_refunds';
 
@@ -70,41 +76,41 @@ class EmailValidationDatabase
         //         ) $charset_collate;";
 
 
-        // $sql_api_keys = "CREATE TABLE IF NOT EXISTS $table_api_keys (
-        //             id int(100) NOT NULL AUTO_INCREMENT,
-        // 			title	VARCHAR( 50 )	NOT NULL,
-        // 			apikey	VARCHAR( 50 )	NOT NULL,
-        // 			userid	bigint(20)		NOT NULL,
-        // 			datetime  DATETIME NOT NULL,
-        // 			status	VARCHAR( 50 )	NOT NULL,
-        //             UNIQUE KEY id (id)
-        //         ) $charset_collate;";
+        $sql_api_keys = "CREATE TABLE IF NOT EXISTS $table_api_keys (
+                    id int(100) NOT NULL AUTO_INCREMENT,
+        			title	VARCHAR( 50 )	NOT NULL,
+        			apikey	VARCHAR( 50 )	NOT NULL,
+        			userid	bigint(20)		NOT NULL,
+        			datetime  DATETIME NOT NULL,
+        			status	VARCHAR( 50 )	NOT NULL,
+                    UNIQUE KEY id (id)
+                ) $charset_collate;";
 
 
-        // $sql_requests = "CREATE TABLE IF NOT EXISTS $table_requests (
-        //             id int(100) NOT NULL AUTO_INCREMENT,
-        // 			userid	bigint(20)		NOT NULL,
-        // 			apikeyid	VARCHAR( 50 )	NOT NULL,
-        // 			email	VARCHAR( 255 )	NOT NULL,
-        // 			result	longtext	NOT NULL,
-        // 			datetime  DATETIME NOT NULL,
-        //             UNIQUE KEY id (id)
-        //         ) $charset_collate;";
+        $sql_requests = "CREATE TABLE IF NOT EXISTS $table_requests (
+                    id int(100) NOT NULL AUTO_INCREMENT,
+        			userid	bigint(20)		NOT NULL,
+        			apikeyid	VARCHAR( 50 )	NOT NULL,
+        			email	VARCHAR( 255 )	NOT NULL,
+        			result	longtext	NOT NULL,
+        			datetime  DATETIME NOT NULL,
+                    UNIQUE KEY id (id)
+                ) $charset_collate;";
 
 
 
-        // $sql_credits = "CREATE TABLE IF NOT EXISTS $table_credits (
-        //             id int(100) NOT NULL AUTO_INCREMENT,
-        // 			userid	bigint(20)		NOT NULL,
-        // 			type	VARCHAR( 50 )	NOT NULL, 
-        // 			credit_type	VARCHAR( 50 )	NOT NULL, 
-        // 			source	VARCHAR( 50 )	NOT NULL, 
-        // 			amount	int(100)	NOT NULL,
-        // 			status	VARCHAR( 50 )	NOT NULL,
-        // 			notes	longtext	NOT NULL,
-        // 			datetime  DATETIME NOT NULL,
-        //             UNIQUE KEY id (id)
-        //         ) $charset_collate;";
+        $sql_credits = "CREATE TABLE IF NOT EXISTS $table_credits (
+                    id int(100) NOT NULL AUTO_INCREMENT,
+        			userid	bigint(20)		NOT NULL,
+        			type	VARCHAR( 50 )	NOT NULL, 
+        			credit_type	VARCHAR( 50 )	NOT NULL, 
+        			source	VARCHAR( 50 )	NOT NULL, 
+        			amount	int(100)	NOT NULL,
+        			status	VARCHAR( 50 )	NOT NULL,
+        			notes	longtext	NOT NULL,
+        			datetime  DATETIME NOT NULL,
+                    UNIQUE KEY id (id)
+                ) $charset_collate;";
 
         // status => for daily credit, expired
         // type => credit, debit
@@ -116,13 +122,12 @@ class EmailValidationDatabase
 
         $sql_products = "CREATE TABLE IF NOT EXISTS $table_products (
                     id int(100) NOT NULL AUTO_INCREMENT,
+        			slug	VARCHAR( 255 )	NOT NULL,
         			userid	bigint(20)		NOT NULL,
         			parent_id	bigint(20)		NOT NULL,
         			title	VARCHAR( 255 )	NOT NULL,
         			content	longtext	NOT NULL,
         			images	longtext	NOT NULL,
-        			downloads	longtext	NOT NULL,
-        			price	VARCHAR( 50 )	NOT NULL,
         			status	VARCHAR( 50 )	NOT NULL,
         			datetime  DATETIME NOT NULL,
                     UNIQUE KEY id (id)
@@ -131,12 +136,28 @@ class EmailValidationDatabase
         $sql_products_meta = "CREATE TABLE IF NOT EXISTS $table_products_meta (
                     id int(100) NOT NULL AUTO_INCREMENT,
         			object_id	bigint(20)		NOT NULL,
-        			meta_key	bigint(20)		NOT NULL,
+        			meta_key	VARCHAR( 255 )		NOT NULL,
         			meta_value	longtext	NOT NULL,
                     UNIQUE KEY id (id)
                 ) $charset_collate;";
 
+        $sql_products_cat = "CREATE TABLE IF NOT EXISTS $table_products_cat (
+                    id int(100) NOT NULL AUTO_INCREMENT,
+        			name 	VARCHAR( 255 )	NOT NULL,
+        			slug  	VARCHAR( 255 )	NOT NULL,
+        			parent_id 	bigint(20)		NOT NULL,
+        			description 	longtext	NOT NULL,
+        			datetime  DATETIME NOT NULL,
+                    UNIQUE KEY id (id)
+                ) $charset_collate;";
 
+        $sql_products_cat_rel = "CREATE TABLE IF NOT EXISTS $table_products_cat_rel (
+                    object_id  int(100) NOT NULL AUTO_INCREMENT,
+        			category_id  	bigint(20)		NOT NULL,
+        			object_type  	VARCHAR( 50 )	NOT NULL,
+  PRIMARY KEY (object_id, category_id, object_type),
+  FOREIGN KEY (category_id) REFERENCES wp_cstore_products_cat(id) ON DELETE CASCADE
+                ) $charset_collate;";
 
 
 
@@ -153,7 +174,7 @@ class EmailValidationDatabase
         $sql_downloads_meta = "CREATE TABLE IF NOT EXISTS $table_downloads_meta (
                     id int(100) NOT NULL AUTO_INCREMENT,
         			object_id	bigint(20)		NOT NULL,
-        			meta_key	bigint(20)		NOT NULL,
+        			meta_key	VARCHAR( 255 )		NOT NULL,
         			meta_value	longtext	NOT NULL,
                     UNIQUE KEY id (id)
                 ) $charset_collate;";
@@ -161,7 +182,6 @@ class EmailValidationDatabase
         $sql_orders = "CREATE TABLE IF NOT EXISTS $table_orders (
                     id int(100) NOT NULL AUTO_INCREMENT,
         			userid	bigint(20)		NOT NULL,
-        			order_id	bigint(20)		NOT NULL,
         			customer_id	bigint(20)		NOT NULL,
         			user_email	VARCHAR( 50 )	NOT NULL,
         			user_name	VARCHAR( 50 )	NOT NULL,
@@ -184,7 +204,7 @@ class EmailValidationDatabase
         $sql_orders_meta = "CREATE TABLE IF NOT EXISTS $table_orders_meta (
                     id int(100) NOT NULL AUTO_INCREMENT,
         			object_id	bigint(20)		NOT NULL,
-        			meta_key	bigint(20)		NOT NULL,
+        			meta_key	VARCHAR( 255 )		NOT NULL,
         			meta_value	longtext	NOT NULL,
                     UNIQUE KEY id (id)
                 ) $charset_collate;";
@@ -192,11 +212,8 @@ class EmailValidationDatabase
         $sql_subscriptions = "CREATE TABLE IF NOT EXISTS $table_subscriptions (
                     id int(100) NOT NULL AUTO_INCREMENT,
 					userid	bigint(20)		NOT NULL,
-					subscription_id	bigint(20)		NOT NULL,
 					order_id	bigint(20)		NOT NULL,
-					customer_id	bigint(20)		NOT NULL,
-        			user_email	VARCHAR( 50 )	NOT NULL,
-        			user_name	VARCHAR( 50 )	NOT NULL,
+					user_id	bigint(20)		NOT NULL,
         			total	VARCHAR( 50 )	NOT NULL,
         			currency	VARCHAR( 50 )	NOT NULL,
         			tax_total	VARCHAR( 50 )	NOT NULL,
@@ -222,7 +239,7 @@ class EmailValidationDatabase
         $sql_subscriptions_meta = "CREATE TABLE IF NOT EXISTS $table_subscriptions_meta (
                     id int(100) NOT NULL AUTO_INCREMENT,
 					object_id	bigint(20)		NOT NULL,
-					meta_key	bigint(20)		NOT NULL,
+					meta_key	VARCHAR( 255 )		NOT NULL,
 					meta_value	longtext	NOT NULL,
                     UNIQUE KEY id (id)
                 ) $charset_collate;";
@@ -253,17 +270,17 @@ class EmailValidationDatabase
         $sql_licenses_meta = "CREATE TABLE IF NOT EXISTS $table_licenses_meta (
                     id int(100) NOT NULL AUTO_INCREMENT,
 					object_id	bigint(20)		NOT NULL,
-					meta_key	bigint(20)		NOT NULL,
+					meta_key	VARCHAR( 255 )		NOT NULL,
 					meta_value	longtext	NOT NULL,
                     UNIQUE KEY id (id)
                 ) $charset_collate;";
 
 
-        //         $sql_api_rate_limits = "CREATE TABLE IF NOT EXISTS $table_api_rate_limits (
-        //     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        //     ip VARCHAR(45) NOT NULL,
-        //     request_time DATETIME NOT NULL
-        // ) $charset_collate;";
+        $sql_api_rate_limits = "CREATE TABLE IF NOT EXISTS $table_api_rate_limits (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            ip VARCHAR(45) NOT NULL,
+            request_time DATETIME NOT NULL
+        ) $charset_collate;";
 
         //         $sql_source_links = "CREATE TABLE IF NOT EXISTS $table_source_links (
         //             id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -278,13 +295,15 @@ class EmailValidationDatabase
 
         // dbDelta($sql_stats_counter);
 
-        // dbDelta($sql_api_keys);
-        // dbDelta($sql_requests);
+        dbDelta($sql_api_keys);
+        dbDelta($sql_requests);
 
 
-        // dbDelta($sql_credits);
+        dbDelta($sql_credits);
 
         dbDelta($sql_products);
+        dbDelta($sql_products_cat);
+        dbDelta($sql_products_cat_rel);
         dbDelta($sql_products_meta);
 
         dbDelta($sql_orders);
@@ -294,7 +313,7 @@ class EmailValidationDatabase
         dbDelta($sql_subscriptions_meta);
 
 
-        // dbDelta($sql_api_rate_limits);
+        dbDelta($sql_api_rate_limits);
         // dbDelta($sql_source_links);
 
         dbDelta($sql_licenses);

@@ -7,6 +7,31 @@ use EmailValidation\Classes\EmailValidationCredits;
 use EmailValidation\Classes\EmailValidationSpammers;
 
 
+
+
+
+
+
+
+function maybe_json_decode($value)
+{
+  if (!is_string($value)) {
+    return $value;
+  }
+
+  $trimmed = trim($value);
+
+  // Quick check: valid JSON must start with [ or {
+  if (($trimmed[0] === '{' || $trimmed[0] === '[')) {
+    $decoded = json_decode($trimmed, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+      return $decoded;
+    }
+  }
+
+  return $value; // Return as-is if not valid JSON
+}
+
 add_shortcode("quick_verify_email", "quick_verify_email");
 
 function quick_verify_email()

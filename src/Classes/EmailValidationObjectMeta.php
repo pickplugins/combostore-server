@@ -15,9 +15,9 @@ class EmailValidationObjectMeta
     function ceate_meta($object, $object_id, $meta_key, $meta_value)
     {
         $this->object_name = $object;
-        $table = $this->object_table();
+        $table = $this->object_meta_table();
 
-        $response = [];
+        $response = null;
         global $wpdb;
 
 
@@ -37,33 +37,55 @@ class EmailValidationObjectMeta
 
 
         if ($wpdb->last_error) {
-            $response['errors'] = true;
+            $response = true;
         } else {
-            $response['success'] = true;
+            $response = false;
         }
-
-
-
-
-
-
-
-
-
 
         return $response;
     }
+
+    function has_meta($object, $object_id, $meta_key)
+    {
+        $this->object_name = $object;
+        $table = $this->object_meta_table();
+
+        $response = null;
+        global $wpdb;
+
+
+        $existing = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT id FROM $table WHERE object_id = %d AND meta_key = %s",
+                $object_id,
+                $meta_key
+            )
+        );
+
+
+        if ($existing) {
+            $response = true;
+        } else {
+            $response = false;
+        }
+
+        return $response;
+    }
+
+
+
+
     function delete_meta($object, $id, $meta_key)
     {
 
         $this->object_name = $object;
-        $table = $this->object_table();
+        $table = $this->object_meta_table();
         global $wpdb;
 
         $response = [];
 
         if (!$id) {
-            $response['errors']["delete_failed"] = "Deleting API key failed";
+            $response['errors']["id_missing"] = "Object Id Missing.";
         }
 
 
@@ -74,47 +96,71 @@ class EmailValidationObjectMeta
 
         return $response;
     }
+
+
+
+
     function update_meta($object, $id, $meta_key, $meta_value)
     {
 
         $this->object_name = $object;
-        $table = $this->object_table();
+        $table = $this->object_meta_table();
 
-        $response = [];
+        $response = null;
 
         if (!$id) {
-            $response['errors']["delete_failed"] = "Deleting API key failed";
+            $response['errors']["id_missing"] = "Object Id Missing.";
         }
 
 
         global $wpdb;
 
-        $updated_data = array(
-            'meta_value' => $meta_value,
-        );
-        $where = array('id' => $id, 'meta_key' => $meta_key,);
+        error_log($meta_key);
+        error_log("meta_key: " . wp_json_encode($meta_value));
 
-        $updated = $wpdb->update($table, $updated_data, $where);
+        if (is_array($meta_value)) {
+            $meta_value = wp_json_encode($meta_value);
+        }
+
+        $meta_exist = $this->has_meta($object, $id, $meta_key);
+
+        if ($meta_exist) {
+            $updated_data = array(
+                'meta_value' => $meta_value,
+            );
+            $where = array('object_id' => $id, 'meta_key' => $meta_key,);
+
+            $updated = $wpdb->update($table, $updated_data, $where);
+
+
+            error_log($updated);
+        } else {
+
+            $updated = $this->ceate_meta($object, $id, $meta_key, $meta_value);
+        }
+
+
 
 
         if ($updated) {
-            $response['success'] = true;
+            $response = true;
         } else {
-            $response['errors'] = true;
+            $response = true;
         }
         return $response;
     }
+
     function get_meta($object, $id, $meta_key)
     {
         $this->object_name = $object;
-        $table = $this->object_table();
+        $table = $this->object_meta_table();
 
         global $wpdb;
 
         $response = [];
 
         if (!$id) {
-            $response['errors']["delete_failed"] = "Deleting API key failed";
+            $response['errors']["id_missing"] = "Object Id Missing.";
         }
 
         $meta_data    = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d AND meta_key = %s", $id, $meta_key));
@@ -143,9 +189,36 @@ class EmailValidationObjectMeta
         if ($object == 'subscriptions') {
             $table = $prefix . 'cstore_subscriptions';
         }
+        if ($object == 'product') {
+            $table = $prefix . 'cstore_products';
+        }
 
         return $table;
     }
+
+
+    function object_meta_table()
+    {
+        global $wpdb;
+        $object = $this->object_name;
+        $prefix = $wpdb->prefix;
+
+
+        if ($object == 'orders') {
+            $table = $prefix . 'cstore_orders_meta';
+        }
+        if ($object == 'subscriptions') {
+            $table = $prefix . 'cstore_subscriptions_meta';
+        }
+        if ($object == 'product') {
+            $table = $prefix . 'cstore_products_meta';
+        }
+
+        return $table;
+    }
+
+
+
 
 
 

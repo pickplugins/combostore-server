@@ -67,16 +67,16 @@ function email_validation_activation()
 {
 
 
-    if (!wp_next_scheduled('run_check_tasks_status')) {
-        wp_schedule_event(time(), '10minute', 'run_check_tasks_status');
-    }
+    // if (!wp_next_scheduled('run_check_tasks_status')) {
+    //     wp_schedule_event(time(), '10minute', 'run_check_tasks_status');
+    // }
 
-    if (!wp_next_scheduled('run_email_validation_task')) {
-        wp_schedule_event(time(), '10minute', 'run_email_validation_task');
-    }
-    if (!wp_next_scheduled('run_email_validation_add_daily_credit')) {
-        wp_schedule_event(time(), 'daily', 'run_email_validation_add_daily_credit');
-    }
+    // if (!wp_next_scheduled('run_email_validation_task')) {
+    //     wp_schedule_event(time(), '10minute', 'run_email_validation_task');
+    // }
+    // if (!wp_next_scheduled('run_email_validation_add_daily_credit')) {
+    //     wp_schedule_event(time(), 'daily', 'run_email_validation_add_daily_credit');
+    // }
 
     do_action('email_validation_activation');
 }
@@ -86,9 +86,9 @@ function email_validation_activation()
 function email_validation_deactivation()
 {
 
-    wp_clear_scheduled_hook('run_check_tasks_status');
-    wp_clear_scheduled_hook('run_email_validation_task');
-    wp_clear_scheduled_hook('run_email_validation_add_daily_credit');
+    // wp_clear_scheduled_hook('run_check_tasks_status');
+    // wp_clear_scheduled_hook('run_email_validation_task');
+    // wp_clear_scheduled_hook('run_email_validation_add_daily_credit');
 
 
     /*

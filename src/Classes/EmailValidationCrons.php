@@ -21,9 +21,9 @@ class EmailValidationCrons
     {
 
         add_filter('wp_login',  array($this, 'ev_wp_login'), 9999, 3);
-        add_shortcode('run_check_tasks_status', array($this, 'run_check_tasks_status'));
-        add_action('run_check_tasks_status',  array($this, 'run_check_tasks_status'));
-        add_action('run_email_validation_task',  array($this, 'run_email_validation_task'));
+        //add_shortcode('run_check_tasks_status', array($this, 'run_check_tasks_status'));
+        // add_action('run_check_tasks_status',  array($this, 'run_check_tasks_status'));
+        // add_action('run_email_validation_task',  array($this, 'run_email_validation_task'));
 
         // add_shortcode('run_email_validation_add_daily_credit', 'run_email_validation_add_daily_credit');
         // add_action('run_email_validation_add_daily_credit', 'run_email_validation_add_daily_credit');
