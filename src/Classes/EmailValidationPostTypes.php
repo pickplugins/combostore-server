@@ -54,7 +54,7 @@ class EmailValidationPostTypes
 				'hierarchical' 			=> false,
 				'rewrite' 				=> true,
 				'query_var' 			=> true,
-				'supports' 				=> array('title', 'editor', 'custom-fields', 'author', 'excerpt'),
+				'supports' 				=> array('title', 'editor', 'thumbnail', 'custom-fields', 'author', 'excerpt'),
 				'show_in_nav_menus' 	=> false,
 				'menu_icon' => 'dashicons-megaphone',
 			))

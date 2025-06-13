@@ -79,6 +79,15 @@ class EmailValidationRest
         );
         register_rest_route(
             'combo-store/v2',
+            '/get_terms',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_terms'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
             '/get_products',
             array(
                 'methods'  => 'POST',
@@ -95,6 +104,17 @@ class EmailValidationRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/delete_products',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'delete_products'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
         register_rest_route(
             'combo-store/v2',
             '/add_product',
@@ -925,7 +945,80 @@ class EmailValidationRest
     }
 
 
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_terms($request)
+    {
 
+
+
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        // header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+
+        // $user = get_user_by('id', $user_id);
+
+        // if (!$user) {
+        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        // }
+
+        // $userRoles = isset($user->roles) ? $user->roles : [];
+        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+        $taxonomy     = isset($request['taxonomy']) ? sanitize_text_field($request['taxonomy']) : '';
+
+
+        $terms = get_terms(array(
+            'taxonomy' => $taxonomy,
+            'hide_empty' => false,
+            'number' => 20,
+        ));
+
+
+
+
+
+        $category_tree = build_category_tree($terms);
+
+
+
+        $response['terms'] = $category_tree;
+
+
+        die(wp_json_encode($response));
+    }
 
 
     /**
@@ -984,34 +1077,30 @@ class EmailValidationRest
         $limit     = isset($request['limit']) ? absint($request['limit']) : 10;
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
-        $status     = isset($request['status']) ? sanitize_text_field($request['status']) : "";
-        $downloadable     = isset($request['downloadable']) ? sanitize_text_field($request['downloadable']) : null;
-        $type     = isset($request['type']) ? sanitize_text_field($request['type']) : "";
-        $sku     = isset($request['sku']) ? sanitize_text_field($request['sku']) : "";
-        $name     = isset($request['name']) ? sanitize_text_field($request['name']) : "";
-        $tag     = isset($request['tag']) ? sanitize_text_field($request['tag']) : "";
-        $category     = isset($request['category']) ? sanitize_text_field($request['category']) : "";
-        $width     = isset($request['width']) ? sanitize_text_field($request['width']) : "";
-        $length     = isset($request['length']) ? sanitize_text_field($request['length']) : "";
-        $average_rating     = isset($request['average_rating']) ? sanitize_text_field($request['average_rating']) : "";
-        $price     = isset($request['price']) ? sanitize_text_field($request['price']) : "";
-        $customer     = isset($request['customer']) ? sanitize_text_field($request['customer']) : "";
-        $customer_id     = isset($request['customer_id']) ? sanitize_text_field($request['customer_id']) : "";
-        $billing_country     = isset($request['billing_country']) ? sanitize_text_field($request['billing_country']) : "";
-        $billing_first_name     = isset($request['billing_first_name']) ? sanitize_text_field($request['billing_first_name']) : "";
-        $billing_last_name     = isset($request['billing_last_name']) ? sanitize_text_field($request['billing_last_name']) : "";
-        $payment_method     = isset($request['payment_method']) ? sanitize_text_field($request['payment_method']) : "";
-        $currency     = isset($request['currency']) ? sanitize_text_field($request['currency']) : "";
+        $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
 
 
         $query_args = [];
+        $meta_query = [];
+        $tax_query = [];
+
+        $query_args['post_type'] = 'product';
+        $query_args['post_status'] = 'any';
 
 
         if (!empty($paged)) {
             $query_args['paged'] = $paged;
         }
+        if (!empty($paged)) {
+            $query_args['s'] = $keyword;
+        }
+
+
         if (!empty($limit)) {
-            $query_args['limit'] = $limit;
+            $query_args['posts_per_page'] = $limit;
+        }
+        if (!empty($paged)) {
+            $query_args['paged'] = $paged;
         }
         if (!empty($orderby)) {
             $query_args['orderby'] = $orderby;
@@ -1019,136 +1108,89 @@ class EmailValidationRest
         if (!empty($order)) {
             $query_args['order'] = $order;
         }
-        if (!empty($status)) {
-            $query_args['status'] = $status;
+        if (!empty($meta_query)) {
+            $query_args['meta_query'] = $meta_query;
         }
-        if (!empty($downloadable)) {
-            $query_args['downloadable'] = $downloadable;
-        }
-        if (!empty($type)) {
-            $query_args['type'] = $type;
-        }
-        if (!empty($sku)) {
-            $query_args['sku'] = $sku;
-        }
-        if (!empty($name)) {
-            $query_args['name'] = $name;
-        }
-        if (!empty($tag)) {
-            $query_args['tag'] = $tag;
-        }
-        if (!empty($category)) {
-            $query_args['category'] = $category;
-        }
-        if (!empty($width)) {
-            $query_args['width'] = $width;
-        }
-        if (!empty($length)) {
-            $query_args['length'] = $length;
-        }
-        if (!empty($average_rating)) {
-            $query_args['average_rating'] = $average_rating;
-        }
-        if (!empty($price)) {
-            $query_args['price'] = $price;
-        }
-        if (!empty($customer)) {
-            $query_args['customer'] = $customer;
-        }
-        if (!empty($customer_id)) {
-            $query_args['customer_id'] = $customer_id;
-        }
-        if (!empty($billing_country)) {
-            $query_args['billing_country'] = $billing_country;
-        }
-        if (!empty($billing_first_name)) {
-            $query_args['billing_first_name'] = $billing_first_name;
-        }
-        if (!empty($billing_last_name)) {
-            $query_args['billing_last_name'] = $billing_last_name;
-        }
-        if (!empty($payment_method)) {
-            $query_args['payment_method'] = $payment_method;
-        }
-        if (!empty($currency)) {
-            $query_args['currency'] = $currency;
+        if (!empty($tax_query)) {
+            $query_args['tax_query'] = $tax_query;
         }
 
+        $wp_query = new WP_Query($query_args);
 
 
+        $entries = [];
+
+        if ($wp_query->have_posts()) :
+            $count = 1;
+
+            while ($wp_query->have_posts()) : $wp_query->the_post();
+
+                $post_id = get_the_ID();
+                $postData = get_post($post_id);
 
 
+                $post_thumbnail_url = get_the_post_thumbnail_url($post_id);
+                $featured = get_post_meta($post_id, 'featured', true);
+                $price = get_post_meta($post_id, 'price', true);
+                $sku = get_post_meta($post_id, 'sku', true);
+                $oldPrice = get_post_meta($post_id, 'oldPrice', true);
+                $stockStatus = get_post_meta($post_id, 'stockStatus', true);
+                $stockCount = get_post_meta($post_id, 'stockCount', true);
+                $gallery = get_post_meta($post_id, 'gallery', true);
+                $addons = get_post_meta($post_id, 'addons', true);
+                $downloads = get_post_meta($post_id, 'downloads', true);
+                $weight = get_post_meta($post_id, 'weight', true);
+                $length = get_post_meta($post_id, 'length', true);
+                $width = get_post_meta($post_id, 'width', true);
+                $height = get_post_meta($post_id, 'height', true);
+                $upsells = get_post_meta($post_id, 'upsells', true);
+                $crosssells = get_post_meta($post_id, 'crosssells', true);
+                $faq = get_post_meta($post_id, 'faq', true);
+                $relatedProducts = get_post_meta($post_id, 'relatedProducts', true);
+                $variations = get_post_meta($post_id, 'variations', true);
 
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
-        $limit     = isset($request['limit']) ? absint($request['limit']) : 10;
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : 'ASC';
+                $categories = [];
+                $tags = [];
+                $brands = [];
+                $brands = [];
+
+                $entries[] = [
+                    "id" => $postData->ID,
+                    "title" => $postData->post_title,
+                    "status" => $postData->post_status,
+                    "sku" => $sku,
+                    "post_thumbnail_url" => $post_thumbnail_url,
+                    "featured" => $featured,
+                    "price" => $price,
+                    "oldPrice" => $oldPrice,
+                    "categories" => $categories,
+                    "tags" => $tags,
+                    "brands" => $brands,
+                    "stockStatus" => $stockStatus,
+                    "stockCount" => $stockCount,
+                    "gallery" => $gallery,
+                    "addons" => $addons,
+                    "downloads" => $downloads,
+                    "weight" => $weight,
+                    "length" => $length,
+                    "width" => $width,
+                    "height" => $height,
+                    "upsells" => $upsells,
+                    "crosssells" => $crosssells,
+                    "faq" => $faq,
+                    "relatedProducts" => $relatedProducts,
+                    "variations" => $variations,
+                ];
+
+            endwhile;
+            wp_reset_query();
+
+        else:
 
 
-        global $wpdb;
+        endif;
 
-        $prefix = $wpdb->prefix;
-        $table_products = $prefix . 'cstore_products';
-
-        $response = [];
-        $offset = ($page - 1) * $limit;
-
-        $last_day = date("Y-m-d");
-        $first_date = date("Y-m-d", strtotime("7 days ago"));
-
-
-
-        // if ($isAdmin) {
-
-        // $entries = $wpdb->get_results("SELECT * FROM $table_products ORDER BY id $order LIMIT $offset, $limit");
-        $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_products");
-        // } else {
-
-        //     $entries = $wpdb->get_results("SELECT * FROM $table_products WHERE userid='$user_id' ORDER BY id $order LIMIT $offset, $limit");
-        //     $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_products WHERE userid='$user_id'");
-        // }
-
-
-        $prefix = $wpdb->prefix;
-        $table_products = $prefix . 'cstore_products';
-        $table_products_meta = $prefix . 'cstore_products_meta';
-
-        // Step 1: Fetch products
-        $entries = $wpdb->get_results("
-    SELECT * FROM $table_products 
-    ORDER BY id $order 
-    LIMIT $offset, $limit
-");
-
-        // Step 2: Collect product IDs
-        $product_ids = wp_list_pluck($entries, 'id');
-        $ids_placeholder = implode(',', array_map('intval', $product_ids));
-
-        // Step 3: Fetch all meta for these products
-        if (!empty($product_ids)) {
-            $meta_results = $wpdb->get_results("
-        SELECT object_id, meta_key, meta_value 
-        FROM $table_products_meta 
-        WHERE object_id IN ($ids_placeholder)
-    ");
-
-            // Organize meta by product ID
-            $meta_by_product = [];
-            foreach ($meta_results as $meta) {
-                // Optional: cast meta_key to string (if your DB uses bigint)
-                $meta_key = (string) $meta->meta_key;
-                $meta_by_product[$meta->object_id][$meta_key] = $meta->meta_value;
-            }
-
-            // Step 4: Merge meta directly into product objects
-            foreach ($entries as &$entry) {
-                if (isset($meta_by_product[$entry->id])) {
-                    foreach ($meta_by_product[$entry->id] as $meta_key => $meta_value) {
-                        $entry->$meta_key = $meta_value;
-                    }
-                }
-            }
-        }
+        $total = 10;
 
 
         $max_pages = ceil($total / $limit);
@@ -1214,52 +1256,113 @@ class EmailValidationRest
         // $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
 
-        $id     = isset($request['id']) ? absint($request['id']) : 1;
+        $post_id     = isset($request['id']) ? absint($request['id']) : 1;
 
 
 
-        $products_data = [];
-        global $wpdb;
+        $productData = [];
+
+        $postData = get_post($post_id);
 
 
-        $prefix = $wpdb->prefix;
-        $table_products = $prefix . 'cstore_products';
-        $table_products_meta = $prefix . 'cstore_products_meta';
+        $post_thumbnail_url = get_the_post_thumbnail_url($post_id);
+        $featured = get_post_meta($post_id, 'featured', true);
+        $priceType = get_post_meta($post_id, 'priceType', true);
+        $price = get_post_meta($post_id, 'price', true);
+        $oldPrice = get_post_meta($post_id, 'oldPrice', true);
+        $menuOrder = get_post_meta($post_id, 'menuOrder', true);
 
-        $taskRow = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT * FROM $table_products WHERE id = %d",
-                $id
-            ),
-            ARRAY_A
-        );
+        $sku = get_post_meta($post_id, 'sku', true);
+        $stockStatus = get_post_meta($post_id, 'stockStatus', true);
+        $stockCount = get_post_meta($post_id, 'stockCount', true);
+        $gallery = get_post_meta($post_id, 'gallery', true);
+        $addons = get_post_meta($post_id, 'addons', true);
 
 
+        $downloads = get_post_meta($post_id, 'downloads', true);
+
+        $weight = get_post_meta($post_id, 'weight', true);
+
+        $length = get_post_meta($post_id, 'length', true);
+        $width = get_post_meta($post_id, 'width', true);
+        $height = get_post_meta($post_id, 'height', true);
+        $upsells = get_post_meta($post_id, 'upsells', true);
+        $crosssells = get_post_meta($post_id, 'crosssells', true);
+        $faq = get_post_meta($post_id, 'faq', true);
+        $relatedProducts = get_post_meta($post_id, 'relatedProducts', true);
+        $variations = get_post_meta($post_id, 'variations', true);
+
+        $categories = get_the_terms($post_id, 'product_cat');
+        $categories = $categories ? $categories : [];
+
+        $tags = get_the_terms($post_id, 'product_tag');
+        $tags = $tags ? $tags : [];
+
+        $brands = [];
+        $brands = [];
 
 
-        // Step 2: Collect product IDs
-        $product_ids = [$id];
-        $ids_placeholder = implode(',', array_map('intval', $product_ids));
+        $categoriesData = [];
+        foreach ($categories as $index => $category) {
 
-        // Step 3: Fetch all meta for these products
-
-        $meta_results = $wpdb->get_results("
-        SELECT object_id, meta_key, meta_value 
-        FROM $table_products_meta 
-        WHERE object_id IN ($ids_placeholder)
-    ");
-
-        // Organize meta by product ID
-        $meta_by_product = [];
-        foreach ($meta_results as $meta) {
-            // Optional: cast meta_key to string (if your DB uses bigint)
-            $meta_key = (string) $meta->meta_key;
-            $meta_by_product[$meta_key] = maybe_json_decode($meta->meta_value);
+            $categoriesData[$index] = $category->term_id;
         }
 
 
+        $tagsData = [];
+        foreach ($tags as $index => $tag) {
 
-        $response['product'] = array_merge($taskRow, $meta_by_product);
+            $tagsData[$index] = [
+                "term_id" => $tag->term_id,
+                "name" => $tag->name
+            ];
+        }
+
+
+        $post_thumbnail = [
+            "id" => "",
+            "title" => "",
+            "src" => $post_thumbnail_url,
+        ];
+
+        $productData = [
+            "id" => $postData->ID,
+            "title" => $postData->post_title,
+            "post_content" => $postData->post_content,
+            "post_excerpt" => $postData->post_excerpt,
+            "slug" => $postData->post_name,
+            "postStatus" => $postData->post_status,
+            "featured" => $featured,
+            "sku" => $sku,
+            "priceType" => $priceType,
+            "price" => $price,
+            "oldPrice" => $oldPrice,
+            "stockStatus" => $stockStatus,
+            "stockCount" => $stockCount,
+            "menuOrder" => $menuOrder,
+
+            "post_thumbnail" => !empty($post_thumbnail) ? $post_thumbnail : [],
+            "tags" => !empty($tags) ? $tags : [],
+            "categories" => !empty($categories) ? $categories : [],
+            "brands" => !empty($brands) ? $brands : [],
+            "addons" => !empty($addons) ? $addons : ["manageStock", "gallery", "dimensions", "categories", "tags"],
+            "faq" => !empty($faq) ? $faq : [],
+            "relatedProducts" => !empty($relatedProducts) ? $relatedProducts : [],
+            "crosssells" => !empty($crosssells) ? $crosssells : [],
+            "upsells" => !empty($upsells) ? $upsells : [],
+            "height" => !empty($height) ? $height : [],
+            "width" => !empty($width) ? $width : [],
+            "length" => !empty($length) ? $length : [],
+            "weight" => !empty($weight) ? $weight : [],
+            "downloads" => !empty($downloads) ? $downloads : [],
+            "gallery" => !empty($gallery) ? $gallery : [],
+            "variations" => !empty($variations) ? $variations : [],
+
+        ];
+
+
+
+        $response['product'] = $productData;
 
 
         die(wp_json_encode($response));
@@ -1319,29 +1422,16 @@ class EmailValidationRest
         $id     = isset($request['id']) ? absint($request['id']) : 1;
 
 
-
-        global $wpdb;
-
-
-        $prefix = $wpdb->prefix;
-        $table_products = $prefix . 'cstore_products';
-
-
         $data = [
-            'slug'      => 'example-slug',
-            'userid'    => get_current_user_id(),  // or a specific user ID
-            'parent_id' => 0,                      // or the actual parent ID
-            'title'     => 'Sample Product Title',
-            'content'   => 'This is the content of the product.',
-            'images'    => [], // or serialized
-            'status'    => 'published',
-            'datetime'  => current_time('mysql'), // WordPress formatted current datetime
+            'post_title'      => 'Sample Product Title',
+            'post_type'      => 'product',
+            'post_status'      => 'draft',
+
         ];
 
-        $wpdb->insert($table_products, $data);
 
-        $inserted =  $wpdb->insert_id;
 
+        $inserted = wp_insert_post($data);
 
         $response['success'] = true;
 
@@ -1394,97 +1484,135 @@ class EmailValidationRest
 
         // $body_arr = json_decode($body);
         $body_arr = json_decode($body, true);
+        error_log(wp_json_encode($body_arr));
 
 
-        $id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+        $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
 
-        $title = $request->get_param('title');
-        $slug = $request->get_param('slug');
-        $userid = $request->get_param('userid');
-        $parent_id = $request->get_param('parent_id');
-        $content = $request->get_param('content');
-        $images = $request->get_param('images');
-        $status = $request->get_param('status');
+        $post_title = $request->get_param('title');
+        $post_content = $request->get_param('post_content');
+        $post_excerpt = $request->get_param('post_excerpt');
+        $post_status = $request->get_param('postStatus');
+        $comment_status = $request->get_param('comment_status');
+        $post_parent = $request->get_param('post_parent');
+        $menu_order = $request->get_param('menu_order');
+        $categories = $request->get_param('categories');
+        $tags = $request->get_param('tags');
 
-        $meta_array = $body_arr;
+        $tags = $tags ? $tags : [];
+        $categories = $categories ? $categories : [];
 
-        unset($meta_array['title']);
-        unset($meta_array['slug']);
-        unset($meta_array['userid']);
-        unset($meta_array['parent_id']);
-        unset($meta_array['content']);
-        unset($meta_array['images']);
-        unset($meta_array['status']);
-        unset($meta_array['id']);
-        unset($meta_array['datetime']);
+        $post_thumbnail = $request->get_param('post_thumbnail');
+        $post_thumbnail_id = isset($post_thumbnail['id']) ? $post_thumbnail['id'] : '';
+
+        $featured = $request->get_param('featured');
 
 
-        // $userid     = isset($request['userid']) ? sanitize_text_field($request['userid']) : '';
-        // $parent_id     = isset($request['parent_id']) ? sanitize_text_field($request['parent_id']) : '';
-        // $title     = isset($request['title']) ? sanitize_text_field($request['title']) : '';
-        // $content     = isset($request['content']) ? sanitize_text_field($request['content']) : '';
-        // $images     = isset($request['images']) ? sanitize_text_field($request['images']) : '';
-        // $status     = isset($request['status']) ? sanitize_text_field($request['status']) : '';
+        $tagIds = [];
+        foreach ($tags as $tag) {
+            $tagIds[] = $tag['term_id'];
+        }
 
+        // error_log(wp_json_encode($tagIds));
 
-        global $wpdb;
-        $prefix = $wpdb->prefix;
-
-        $table = $prefix . 'cstore_products';
 
         $response = [];
+        $postData = [
+            "ID" => $post_id,
+            "post_title" => $post_title,
+            "post_content" => $post_content,
+            "post_excerpt" => $post_excerpt,
+            "post_status" => $post_status,
+            "comment_status" => $comment_status,
+            "post_parent" => $post_parent,
+            "menu_order" => $menu_order,
+        ];
+        wp_update_post($postData);
 
-        $values = [];
-        $data = [];
+        wp_set_post_terms($post_id, $categories, 'product_cat');
+        wp_set_post_terms($post_id, $tagIds, 'product_tag');
 
-
-        $updated_data = [];
-
-        if ($userid) {
-            $updated_data['userid'] = $userid;
-        }
-        if ($parent_id) {
-            $updated_data['parent_id'] = $parent_id;
-        }
-        if ($title) {
-            $updated_data['title'] = $title;
-        }
-        if ($title) {
-            $updated_data['slug'] = $slug;
-        }
-        if ($content) {
-            $updated_data['content'] = $content;
-        }
-        if ($images) {
-            $updated_data['images'] = $images;
-        }
-        if ($status) {
-            $updated_data['status'] = $status;
+        if (!empty($post_thumbnail_id)) {
+            set_post_thumbnail($post_id, $post_thumbnail_id);
         }
 
 
-        $where = array('id' => $id);
-
-        $updated = $wpdb->update($table, $updated_data, $where);
-
-
-
-
-
-        $EmailValidationObjectMeta = new EmailValidationObjectMeta();
-        //$duplicate_count = $EmailValidationObjectMeta->get_meta('task', $task_id, "duplicate_count");
-
-        //$EmailValidationObjectMeta->update_meta('task', $task_id, "duplicate_count", $total_duplicates);
-
-        if (!empty($meta_array)) {
-            foreach ($meta_array as $meta_key => $meta_value) {
-
-                error_log($meta_key);
-                error_log(wp_json_encode($meta_value));
-
-                $EmailValidationObjectMeta->update_meta('product', $id, $meta_key, $meta_value);
-            }
+        if (!empty($body_arr['sku'])) {
+            update_post_meta($post_id, 'sku', $body_arr['sku']);
         }
+        if (!empty($body_arr['menuOrder'])) {
+            update_post_meta($post_id, 'menuOrder', $body_arr['menuOrder']);
+        }
+        if (!empty($body_arr['featured'])) {
+            update_post_meta($post_id, 'featured', $featured);
+        }
+        if (!empty($body_arr['priceType'])) {
+            update_post_meta($post_id, 'priceType', $body_arr['priceType']);
+        }
+        if (!empty($body_arr['price'])) {
+
+            update_post_meta($post_id, 'price', $body_arr['price']);
+        }
+        if (!empty($body_arr['oldPrice'])) {
+            update_post_meta($post_id, 'oldPrice', $body_arr['oldPrice']);
+        }
+        if (!empty($body_arr['stockStatus'])) {
+            update_post_meta($post_id, 'stockStatus', $body_arr['stockStatus']);
+        }
+        if (!empty($body_arr['stockCount'])) {
+            update_post_meta($post_id, 'stockCount', $body_arr['stockCount']);
+        }
+        if (!empty($body_arr['gallery'])) {
+            $gallery = maybe_json_decode($body_arr['gallery']);
+            update_post_meta($post_id, 'gallery', $gallery);
+        }
+        if (!empty($body_arr['addons'])) {
+            $addons = maybe_json_decode($body_arr['addons']);
+            update_post_meta($post_id, 'addons', $addons);
+        }
+        if (!empty($body_arr['downloads'])) {
+            $downloads = maybe_json_decode($body_arr['downloads']);
+            update_post_meta($post_id, 'downloads', $downloads);
+        }
+        if (!empty($body_arr['weight'])) {
+            $weight = maybe_json_decode($body_arr['weight']);
+            update_post_meta($post_id, 'weight', $weight);
+        }
+        if (!empty($body_arr['length'])) {
+            $length = maybe_json_decode($body_arr['length']);
+            update_post_meta($post_id, 'length', $length);
+        }
+        if (!empty($body_arr['width'])) {
+            $width = maybe_json_decode($body_arr['width']);
+            update_post_meta($post_id, 'width', $width);
+        }
+        if (!empty($body_arr['height'])) {
+            $height = maybe_json_decode($body_arr['height']);
+            update_post_meta($post_id, 'height', $height);
+        }
+        if (!empty($body_arr['upsells'])) {
+            $upsells = maybe_json_decode($body_arr['upsells']);
+            update_post_meta($post_id, 'upsells', $upsells);
+        }
+        if (!empty($body_arr['crosssells'])) {
+            $crosssells = maybe_json_decode($body_arr['crosssells']);
+            update_post_meta($post_id, 'crosssells', $crosssells);
+        }
+        if (!empty($body_arr['faq'])) {
+            $faq = maybe_json_decode($body_arr['faq']);
+            update_post_meta($post_id, 'faq', $faq);
+        }
+        if (!empty($body_arr['relatedProducts'])) {
+            $relatedProducts = maybe_json_decode($body_arr['relatedProducts']);
+            update_post_meta($post_id, 'relatedProducts', $relatedProducts);
+        }
+        if (!empty($body_arr['variations'])) {
+            $variations = maybe_json_decode($body_arr['variations']);
+            update_post_meta($post_id, 'variations', $variations);
+        }
+
+
+
 
 
         die(wp_json_encode($response));
@@ -5181,6 +5309,94 @@ class EmailValidationRest
             foreach ($ids as $id) {
 
                 $wpdb->delete($table_subscriptions, array('id' => $id), array('%d'));
+            }
+        }
+
+        $response['success'] = true;
+
+
+        // if ($inserted) {
+        //     $response['id'] = $inserted;
+        //     $response['success'] = true;
+        // }
+
+        // if (!$inserted) {
+        //     $response['errors'] = true;
+        // }
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function delete_products($request)
+    {
+
+
+
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        // header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+        $ids     = isset($request['ids']) ? ($request['ids']) : [];
+
+
+        $response = [];
+
+        // $gmt_offset = get_option('gmt_offset');
+        // $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+
+
+        // global $wpdb;
+        // $prefix = $wpdb->prefix;
+        // $table_subscriptions = $prefix . 'cstore_subscriptions';
+
+        // $table_orders = $prefix . 'cstore_orders';
+        // $table_orders_meta = $prefix . 'cstore_orders_meta';
+        // $table_subscriptions = $prefix . 'cstore_subscriptions';
+        // $table_subscriptions_meta = $prefix . 'cstore_subscriptions_meta';
+        // $table_licenses = $prefix . 'cstore_licenses';
+        // $table_licenses_meta = $prefix . 'cstore_licenses_meta';
+
+        if (!empty($ids)) {
+
+            foreach ($ids as $id) {
+                wp_delete_post($id, false);
+                // $wpdb->delete($table_subscriptions, array('id' => $id), array('%d'));
             }
         }
 

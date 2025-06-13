@@ -8,7 +8,29 @@ use EmailValidation\Classes\EmailValidationSpammers;
 
 
 
+function build_category_tree($terms, $parent = 0)
+{
+  $branch = [];
 
+  foreach ($terms as $term) {
+    if ($term->parent == $parent) {
+      $children = build_category_tree($terms, $term->term_id);
+
+      $node = [];
+
+      $node['term_id'] = $term->term_id;
+      $node['name'] = $term->name;
+      if ($children) {
+        $node['children'] = $children;
+      }
+
+
+      $branch[$term->term_id] = $node;
+    }
+  }
+
+  return $branch;
+}
 
 
 
