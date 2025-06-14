@@ -124,6 +124,45 @@ class EmailValidationRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_coupons',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_coupons'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_coupon',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_coupon'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/add_coupon',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'add_coupon'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/update_coupon',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_coupon'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -1149,6 +1188,32 @@ class EmailValidationRest
                 $relatedProducts = get_post_meta($post_id, 'relatedProducts', true);
                 $variations = get_post_meta($post_id, 'variations', true);
 
+                $categories = get_the_terms($post_id, 'product_cat');
+                $categories = $categories ? $categories : [];
+
+                $tags = get_the_terms($post_id, 'product_tag');
+                $tags = $tags ? $tags : [];
+
+                $categoriesData = [];
+                foreach ($categories as $index => $category) {
+
+                    $categoriesData[$index] = [
+                        "term_id" => $category->term_id,
+                        "name" => $category->name
+                    ];
+                }
+
+
+                $tagsData = [];
+                foreach ($tags as $index => $tag) {
+
+                    $tagsData[$index] = [
+                        "term_id" => $tag->term_id,
+                        "name" => $tag->name
+                    ];
+                }
+
+
                 $categories = [];
                 $tags = [];
                 $brands = [];
@@ -1163,8 +1228,8 @@ class EmailValidationRest
                     "featured" => $featured,
                     "price" => $price,
                     "oldPrice" => $oldPrice,
-                    "categories" => $categories,
-                    "tags" => $tags,
+                    "categories" => $categoriesData,
+                    "tags" => $tagsData,
                     "brands" => $brands,
                     "stockStatus" => $stockStatus,
                     "stockCount" => $stockCount,
@@ -1194,6 +1259,418 @@ class EmailValidationRest
 
 
         $max_pages = ceil($total / $limit);
+        $response['total'] = $total;
+        $response['max_pages'] = $max_pages;
+        $response['posts'] = $entries;
+
+
+        die(wp_json_encode($response));
+    }
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function update_coupon($request)
+    {
+
+
+        // $token = $request->get_header('Authorization');
+
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // // Get user by ID
+        // // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        $post_title = $request->get_param('title');
+        $post_status = $request->get_param('postStatus');
+
+
+
+
+        $response = [];
+        $postData = [
+            "ID" => $post_id,
+            "post_title" => $post_title,
+            "post_status" => $post_status,
+        ];
+        wp_update_post($postData);
+
+
+        if (isset($body_arr['couponType'])) {
+            update_post_meta($post_id, 'couponType', $body_arr['couponType']);
+        }
+        if (isset($body_arr['couponCode'])) {
+            update_post_meta($post_id, 'couponCode', $body_arr['couponCode']);
+        }
+        if (isset($body_arr['startDate'])) {
+            update_post_meta($post_id, 'startDate', $body_arr['startDate']);
+        }
+        if (isset($body_arr['endDate'])) {
+            update_post_meta($post_id, 'endDate', $body_arr['endDate']);
+        }
+        if (isset($body_arr['limit'])) {
+
+            update_post_meta($post_id, 'limit', $body_arr['limit']);
+        }
+        if (isset($body_arr['amount'])) {
+            update_post_meta($post_id, 'amount', $body_arr['amount']);
+        }
+        if (isset($body_arr['amountUnit'])) {
+            update_post_meta($post_id, 'amountUnit', $body_arr['amountUnit']);
+        }
+        if (isset($body_arr['addons'])) {
+            update_post_meta($post_id, 'addons', $body_arr['addons']);
+        }
+
+
+        die(wp_json_encode($response));
+    }
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_coupon($request)
+    {
+
+
+
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        // header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+
+        // $user = get_user_by('id', $user_id);
+
+        // if (!$user) {
+        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        // }
+
+        // $userRoles = isset($user->roles) ? $user->roles : [];
+        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+        $post_id     = isset($request['id']) ? absint($request['id']) : 1;
+
+
+
+        $productData = [];
+
+        $postData = get_post($post_id);
+
+
+        $couponCode = get_post_meta($post_id, 'couponCode', true);
+        $couponType = get_post_meta($post_id, 'couponType', true);
+        $startDate = get_post_meta($post_id, 'startDate', true);
+        $endDate = get_post_meta($post_id, 'endDate', true);
+        $limit = get_post_meta($post_id, 'limit', true);
+
+        $amount = get_post_meta($post_id, 'amount', true);
+        $addons = get_post_meta($post_id, 'addons', true);
+
+
+        $addons = $addons ? $addons : [];
+
+        $productData = [
+            "id" => $postData->ID,
+            "title" => $postData->post_title,
+
+            "postStatus" => $postData->post_status,
+            "couponCode" => $couponCode,
+            "amount" => $amount,
+            "couponType" => $couponType,
+            "startDate" => $startDate,
+            "endDate" => $endDate,
+            "limit" => $limit,
+            "addons" => $addons,
+
+        ];
+
+
+
+        $response['product'] = $productData;
+
+
+        die(wp_json_encode($response));
+    }
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function add_coupon($request)
+    {
+
+
+
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        // header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+
+        // $user = get_user_by('id', $user_id);
+
+        // if (!$user) {
+        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        // }
+
+        // $userRoles = isset($user->roles) ? $user->roles : [];
+        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+        $id     = isset($request['id']) ? absint($request['id']) : 1;
+
+
+        $data = [
+            'post_title'      => 'Sample Coupon',
+            'post_type'      => 'coupon',
+            'post_status'      => 'draft',
+
+        ];
+
+
+
+        $inserted = wp_insert_post($data);
+
+        $response['success'] = true;
+
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_coupons($request)
+    {
+
+
+
+        // header('Access-Control-Allow-Origin: *');
+        // header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        // header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+
+
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+
+        // $user = get_user_by('id', $user_id);
+
+        // if (!$user) {
+        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        // }
+
+        // $userRoles = isset($user->roles) ? $user->roles : [];
+        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+        $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
+        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
+        $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
+        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
+        $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
+
+
+        $query_args = [];
+        $meta_query = [];
+        $tax_query = [];
+
+        $query_args['post_type'] = 'coupon';
+        $query_args['post_status'] = 'any';
+
+
+        if (!empty($paged)) {
+            $query_args['paged'] = $paged;
+        }
+        if (!empty($paged)) {
+            $query_args['s'] = $keyword;
+        }
+
+
+        if (!empty($per_page)) {
+            $query_args['posts_per_page'] = $per_page;
+        }
+        if (!empty($paged)) {
+            $query_args['paged'] = $paged;
+        }
+        if (!empty($orderby)) {
+            $query_args['orderby'] = $orderby;
+        }
+        if (!empty($order)) {
+            $query_args['order'] = $order;
+        }
+        if (!empty($meta_query)) {
+            $query_args['meta_query'] = $meta_query;
+        }
+        if (!empty($tax_query)) {
+            $query_args['tax_query'] = $tax_query;
+        }
+
+        $wp_query = new WP_Query($query_args);
+
+
+        $entries = [];
+
+        if ($wp_query->have_posts()) :
+            $count = 1;
+
+            while ($wp_query->have_posts()) : $wp_query->the_post();
+
+                $post_id = get_the_ID();
+                $postData = get_post($post_id);
+
+
+                $couponType = get_post_meta($post_id, 'couponType', true);
+                $couponCode = get_post_meta($post_id, 'couponCode', true);
+                $startDate = get_post_meta($post_id, 'startDate', true);
+                $endDate = get_post_meta($post_id, 'endDate', true);
+                $limit = get_post_meta($post_id, 'limit', true);
+                $amount = get_post_meta($post_id, 'amount', true);
+                $amountUnit = get_post_meta($post_id, 'amountUnit', true);
+
+                $entries[] = [
+                    "id" => $postData->ID,
+                    "title" => $postData->post_title,
+                    "post_status" => $postData->post_status,
+                    "couponCode" => $couponCode,
+                    "couponType" => $couponType,
+                    "startDate" => $startDate,
+                    "endDate" => $endDate,
+                    "limit" => $limit,
+                    "amount" => $amount,
+
+                ];
+
+            endwhile;
+            wp_reset_query();
+
+        else:
+
+
+        endif;
+
+        $total = 10;
+
+
+        $max_pages = ceil($total / $per_page);
         $response['total'] = $total;
         $response['max_pages'] = $max_pages;
         $response['posts'] = $entries;
@@ -1342,8 +1819,8 @@ class EmailValidationRest
             "menuOrder" => $menuOrder,
 
             "post_thumbnail" => !empty($post_thumbnail) ? $post_thumbnail : [],
-            "tags" => !empty($tags) ? $tags : [],
-            "categories" => !empty($categories) ? $categories : [],
+            "tags" => !empty($tagsData) ? $tagsData : [],
+            "categories" => !empty($categoriesData) ? $categoriesData : [],
             "brands" => !empty($brands) ? $brands : [],
             "addons" => !empty($addons) ? $addons : ["manageStock", "gallery", "dimensions", "categories", "tags"],
             "faq" => !empty($faq) ? $faq : [],
@@ -1484,7 +1961,6 @@ class EmailValidationRest
 
         // $body_arr = json_decode($body);
         $body_arr = json_decode($body, true);
-        error_log(wp_json_encode($body_arr));
 
 
         $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
@@ -1502,6 +1978,8 @@ class EmailValidationRest
         $tags = $tags ? $tags : [];
         $categories = $categories ? $categories : [];
 
+        // error_log(wp_json_encode($categories));
+
         $post_thumbnail = $request->get_param('post_thumbnail');
         $post_thumbnail_id = isset($post_thumbnail['id']) ? $post_thumbnail['id'] : '';
 
@@ -1513,7 +1991,6 @@ class EmailValidationRest
             $tagIds[] = $tag['term_id'];
         }
 
-        // error_log(wp_json_encode($tagIds));
 
 
         $response = [];
@@ -1531,88 +2008,83 @@ class EmailValidationRest
 
         wp_set_post_terms($post_id, $categories, 'product_cat');
         wp_set_post_terms($post_id, $tagIds, 'product_tag');
-
-        if (!empty($post_thumbnail_id)) {
-            set_post_thumbnail($post_id, $post_thumbnail_id);
-        }
+        set_post_thumbnail($post_id, $post_thumbnail_id);
 
 
-        if (!empty($body_arr['sku'])) {
+
+        if (isset($body_arr['sku'])) {
             update_post_meta($post_id, 'sku', $body_arr['sku']);
         }
-        if (!empty($body_arr['menuOrder'])) {
+        if (isset($body_arr['menuOrder'])) {
             update_post_meta($post_id, 'menuOrder', $body_arr['menuOrder']);
         }
-        if (!empty($body_arr['featured'])) {
+        if (isset($body_arr['featured'])) {
             update_post_meta($post_id, 'featured', $featured);
         }
-        if (!empty($body_arr['priceType'])) {
+        if (isset($body_arr['priceType'])) {
             update_post_meta($post_id, 'priceType', $body_arr['priceType']);
         }
-        if (!empty($body_arr['price'])) {
+        if (isset($body_arr['price'])) {
 
             update_post_meta($post_id, 'price', $body_arr['price']);
         }
-        if (!empty($body_arr['oldPrice'])) {
+        if (isset($body_arr['oldPrice'])) {
             update_post_meta($post_id, 'oldPrice', $body_arr['oldPrice']);
         }
-        if (!empty($body_arr['stockStatus'])) {
+        if (isset($body_arr['stockStatus'])) {
             update_post_meta($post_id, 'stockStatus', $body_arr['stockStatus']);
         }
-        if (!empty($body_arr['stockCount'])) {
+        if (isset($body_arr['stockCount'])) {
             update_post_meta($post_id, 'stockCount', $body_arr['stockCount']);
         }
-        if (!empty($body_arr['gallery'])) {
+        if (isset($body_arr['gallery'])) {
             $gallery = maybe_json_decode($body_arr['gallery']);
             update_post_meta($post_id, 'gallery', $gallery);
         }
-        if (!empty($body_arr['addons'])) {
+        if (isset($body_arr['addons'])) {
             $addons = maybe_json_decode($body_arr['addons']);
             update_post_meta($post_id, 'addons', $addons);
         }
-        if (!empty($body_arr['downloads'])) {
+        if (isset($body_arr['downloads'])) {
             $downloads = maybe_json_decode($body_arr['downloads']);
             update_post_meta($post_id, 'downloads', $downloads);
         }
-        if (!empty($body_arr['weight'])) {
+        if (isset($body_arr['weight'])) {
             $weight = maybe_json_decode($body_arr['weight']);
             update_post_meta($post_id, 'weight', $weight);
         }
-        if (!empty($body_arr['length'])) {
+        if (isset($body_arr['length'])) {
             $length = maybe_json_decode($body_arr['length']);
             update_post_meta($post_id, 'length', $length);
         }
-        if (!empty($body_arr['width'])) {
+        if (isset($body_arr['width'])) {
             $width = maybe_json_decode($body_arr['width']);
             update_post_meta($post_id, 'width', $width);
         }
-        if (!empty($body_arr['height'])) {
+        if (isset($body_arr['height'])) {
             $height = maybe_json_decode($body_arr['height']);
             update_post_meta($post_id, 'height', $height);
         }
-        if (!empty($body_arr['upsells'])) {
+        if (isset($body_arr['upsells'])) {
             $upsells = maybe_json_decode($body_arr['upsells']);
             update_post_meta($post_id, 'upsells', $upsells);
         }
-        if (!empty($body_arr['crosssells'])) {
+        if (isset($body_arr['crosssells'])) {
             $crosssells = maybe_json_decode($body_arr['crosssells']);
             update_post_meta($post_id, 'crosssells', $crosssells);
         }
-        if (!empty($body_arr['faq'])) {
+        if (isset($body_arr['faq'])) {
             $faq = maybe_json_decode($body_arr['faq']);
             update_post_meta($post_id, 'faq', $faq);
         }
-        if (!empty($body_arr['relatedProducts'])) {
+        if (isset($body_arr['relatedProducts'])) {
             $relatedProducts = maybe_json_decode($body_arr['relatedProducts']);
             update_post_meta($post_id, 'relatedProducts', $relatedProducts);
         }
-        if (!empty($body_arr['variations'])) {
+        if (isset($body_arr['variations'])) {
             $variations = maybe_json_decode($body_arr['variations']);
             update_post_meta($post_id, 'variations', $variations);
         }
-
-
-
 
 
         die(wp_json_encode($response));
