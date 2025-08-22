@@ -1117,6 +1117,10 @@ class EmailValidationRest
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
         $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
+        $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
+        $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
+
+        error_log(wp_json_encode($post__in));
 
 
         $query_args = [];
@@ -1132,6 +1136,12 @@ class EmailValidationRest
         }
         if (!empty($paged)) {
             $query_args['s'] = $keyword;
+        }
+        if (!empty($post__in)) {
+            $query_args['post__in'] = $post__in;
+        }
+        if (!empty($post__not_in)) {
+            $query_args['post__not_in'] = $post__not_in;
         }
 
 
@@ -1197,9 +1207,12 @@ class EmailValidationRest
                 $categoriesData = [];
                 foreach ($categories as $index => $category) {
 
+
+
                     $categoriesData[$index] = [
                         "term_id" => $category->term_id,
-                        "name" => $category->name
+                        "name" => $category->name,
+                        "slug" => $category->slug,
                     ];
                 }
 
@@ -1782,7 +1795,11 @@ class EmailValidationRest
         $categoriesData = [];
         foreach ($categories as $index => $category) {
 
-            $categoriesData[$index] = $category->term_id;
+            $categoriesData[$index] = [
+                "term_id" => $category->term_id,
+                "name" => $category->name,
+                "slug" => $category->slug,
+            ];
         }
 
 
@@ -1791,7 +1808,8 @@ class EmailValidationRest
 
             $tagsData[$index] = [
                 "term_id" => $tag->term_id,
-                "name" => $tag->name
+                "name" => $tag->name,
+                "slug" => $tag->slug,
             ];
         }
 

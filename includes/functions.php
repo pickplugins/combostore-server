@@ -20,6 +20,8 @@ function build_category_tree($terms, $parent = 0)
 
       $node['term_id'] = $term->term_id;
       $node['name'] = $term->name;
+      $node['count'] = $term->count;
+
       if ($children) {
         $node['children'] = $children;
       }
@@ -28,6 +30,9 @@ function build_category_tree($terms, $parent = 0)
       $branch[$term->term_id] = $node;
     }
   }
+
+
+
 
   return $branch;
 }
