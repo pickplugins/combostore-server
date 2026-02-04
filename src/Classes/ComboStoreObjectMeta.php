@@ -1,11 +1,11 @@
 <?php
 
-namespace EmailValidation\Classes;
+namespace ComboStore\Classes;
 
 if (!defined('ABSPATH')) exit;  // if direct access
 
 
-class EmailValidationObjectMeta
+class ComboStoreObjectMeta
 {
     public $object_name = "";
 
@@ -103,6 +103,9 @@ class EmailValidationObjectMeta
     function update_meta($object, $id, $meta_key, $meta_value)
     {
 
+
+
+
         $this->object_name = $object;
         $table = $this->object_meta_table();
 
@@ -115,8 +118,7 @@ class EmailValidationObjectMeta
 
         global $wpdb;
 
-        error_log($meta_key);
-        error_log("meta_key: " . wp_json_encode($meta_value));
+
 
         if (is_array($meta_value)) {
             $meta_value = wp_json_encode($meta_value);
@@ -131,9 +133,6 @@ class EmailValidationObjectMeta
             $where = array('object_id' => $id, 'meta_key' => $meta_key,);
 
             $updated = $wpdb->update($table, $updated_data, $where);
-
-
-            error_log($updated);
         } else {
 
             $updated = $this->ceate_meta($object, $id, $meta_key, $meta_value);
@@ -155,6 +154,10 @@ class EmailValidationObjectMeta
         $this->object_name = $object;
         $table = $this->object_meta_table();
 
+
+
+
+
         global $wpdb;
 
         $response = [];
@@ -163,7 +166,8 @@ class EmailValidationObjectMeta
             $response['errors']["id_missing"] = "Object Id Missing.";
         }
 
-        $meta_data    = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d AND meta_key = %s", $id, $meta_key));
+        $meta_data    = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE object_id=%d AND meta_key = %s", $id, $meta_key));
+
 
 
         $meta_value = isset($meta_data->meta_value) ? $meta_data->meta_value : '';
@@ -171,6 +175,33 @@ class EmailValidationObjectMeta
 
 
         return $meta_value;
+    }
+    function get_object_id_meta_value($object, $meta_key, $value)
+    {
+        $this->object_name = $object;
+        $table = $this->object_meta_table();
+
+
+
+
+
+        global $wpdb;
+
+        $response = [];
+
+        if (!$value) {
+            $response['errors']["id_missing"] = "Object Id Missing.";
+        }
+
+        $meta_data    = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE meta_key=%d AND meta_value = %s",  $meta_key, $value));
+
+
+
+        $object_id = isset($meta_data->object_id) ? $meta_data->object_id : '';
+
+
+
+        return $object_id;
     }
 
 
@@ -180,18 +211,14 @@ class EmailValidationObjectMeta
         $object = $this->object_name;
         $prefix = $wpdb->prefix;
 
-        if ($object == 'task') {
-            $table = $prefix . 'cstore_validation_tasks';
-        }
+
         if ($object == 'orders') {
             $table = $prefix . 'cstore_orders';
         }
         if ($object == 'subscriptions') {
             $table = $prefix . 'cstore_subscriptions';
         }
-        if ($object == 'product') {
-            $table = $prefix . 'cstore_products';
-        }
+
 
         return $table;
     }
@@ -210,9 +237,7 @@ class EmailValidationObjectMeta
         if ($object == 'subscriptions') {
             $table = $prefix . 'cstore_subscriptions_meta';
         }
-        if ($object == 'product') {
-            $table = $prefix . 'cstore_products_meta';
-        }
+
 
         return $table;
     }
@@ -225,7 +250,7 @@ class EmailValidationObjectMeta
     function get_datetime()
     {
         $gmt_offset = get_option('gmt_offset');
-        $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $datetime;
     }
@@ -237,7 +262,7 @@ class EmailValidationObjectMeta
     function get_date()
     {
         $gmt_offset = get_option('gmt_offset');
-        $date = date('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
+        $date = gmdate('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
 
         return $date;
     }
@@ -246,7 +271,7 @@ class EmailValidationObjectMeta
     function get_time()
     {
         $gmt_offset = get_option('gmt_offset');
-        $time = date('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $time = gmdate('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $time;
     }

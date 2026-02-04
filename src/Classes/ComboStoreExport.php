@@ -1,11 +1,11 @@
 <?php
 
-namespace EmailValidation\Classes;
+namespace ComboStore\Classes;
 
 if (!defined('ABSPATH')) exit;  // if direct access
 
 
-class EmailValidationExport
+class ComboStoreExport
 {
     public $email = "";
     public $user_id = "";
@@ -15,7 +15,7 @@ class EmailValidationExport
 
 
 
-    function export_email_validation_data($task_id, $queryPrams = null)
+    function export_combo_store_data($task_id, $queryPrams = null)
     {
         global $wpdb;
         $table_name = $wpdb->prefix . 'cstore_validation_tasks_entries';
@@ -70,7 +70,7 @@ class EmailValidationExport
         }
         // return;
 
-        $csv_filename = 'email_validation_export_' . time() . '.csv';
+        $csv_filename = 'combo_store_export_' . time() . '.csv';
         $csv_path = WP_CONTENT_DIR . '/uploads/' . $csv_filename;
         $csv_file = fopen($csv_path, 'w');
 
@@ -161,7 +161,7 @@ class EmailValidationExport
     function get_datetime()
     {
         $gmt_offset = get_option('gmt_offset');
-        $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $datetime;
     }
@@ -173,7 +173,7 @@ class EmailValidationExport
     function get_date()
     {
         $gmt_offset = get_option('gmt_offset');
-        $date = date('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
+        $date = gmdate('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
 
         return $date;
     }
@@ -182,11 +182,11 @@ class EmailValidationExport
     function get_time()
     {
         $gmt_offset = get_option('gmt_offset');
-        $time = date('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $time = gmdate('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $time;
     }
 }
 
 
-$EmailValidationExport = new EmailValidationExport();
+$ComboStoreExport = new ComboStoreExport();

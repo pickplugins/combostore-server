@@ -1,6 +1,6 @@
 <?php
 
-namespace EmailValidation\Classes;
+namespace ComboStore\Classes;
 
 
 if (!defined('ABSPATH')) exit;  // if direct access 
@@ -470,7 +470,7 @@ class ComboRequestLemonsqueezy
         $wpdb->insert($table, $data, $format);
         $inserted_id = $wpdb->insert_id; // Get the newly inserted row ID
 
-        do_action('email_validation_order_created', $data);
+        do_action('combo_store_order_created', $data);
 
         if ($inserted_id) {
             $response['id'] = $inserted_id;
@@ -833,7 +833,7 @@ class ComboRequestLemonsqueezy
     function get_datetime()
     {
         $gmt_offset = get_option('gmt_offset');
-        $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $datetime;
     }

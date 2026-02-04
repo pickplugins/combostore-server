@@ -1,23 +1,38 @@
 <?php
 
-namespace EmailValidation\Classes;
+namespace ComboStore\Classes;
+
+use WP_User;
 
 if (!defined('ABSPATH')) exit;  // if direct access
 
 
-class EmailValidationRegister
+class ComboStoreRegister
 {
     public $email = "";
     public $password = "";
+    public $role = "customer";
 
 
     public function __construct() {}
 
-    function create_user($email, $password)
+    function create_user($args)
     {
 
-        $this->email = $email;
+
+
+        $email = isset($args['email']) ? $args['email'] : '';
+        $password = isset($args['password']) ? $args['password'] : '';
+        $role = isset($args['role']) ? $args['role'] : '';
+        $mobile = isset($args['mobile']) ? $args['mobile'] : '';
+
+
+        $this->email = !empty($email) ? $email : $mobile;
         $this->password = $password;
+        $this->role = $role;
+
+
+
         $response = [];
 
         $username = $this->generate_username_from_email($email);
@@ -33,19 +48,47 @@ class EmailValidationRegister
         $user_id = isset($user->ID) ? $user->ID : '';
         $user_id = wp_create_user($credentials['username'], $credentials['password'], $credentials['email']);
 
+        if (!empty($mobile)) {
+            update_user_meta($user_id, "mobile", $mobile);
+        }
+
+        $user = new WP_User($user_id);
+
+
+
+
+        // $userdata = array(
+        //     'user_login'    => $email,
+        //     'user_pass'     => $password,
+        //     'display_name'  => $email,
+        // );
+
+        // wp_insert_user($userdata);
+
+
+
+
+
+        $user->set_role($role);
 
 
         if (!is_wp_error($user_id)) {
             $response['error'] = false;
-            $response['messages']['success'] = "Registration Success";
+            $response['user_id'] = $user_id;
+            $response['messages']['success'] = "Registration Successful, please login.";
 
             return wp_json_encode($response);
         } else {
 
+            $value = array_values($user_id->errors)[0];
+            $message = $value[0];
+
+            
 
 
             $response['error'] = true;
-            $response['messages'] = $user_id->errors;
+            $response['user_id'] = $user_id;
+            $response['messages'] = $value;
 
             return wp_json_encode($response);
         }
@@ -90,10 +133,11 @@ class EmailValidationRegister
     {
         $email = $this->get_email();
         $password = $this->get_password();
+        $role = $this->get_role();
 
         $user = get_user_by('email', $email);
 
-        $user_id = isset($user->ID) ? $user->ID :  $this->create_user($email, $password);
+        $user_id = isset($user->ID) ? $user->ID :  $this->create_user($email, $password, $role);
 
         return $user_id;
     }
@@ -106,6 +150,11 @@ class EmailValidationRegister
     {
 
         return $this->password;
+    }
+    function get_role()
+    {
+
+        return $this->role;
     }
 
 
@@ -122,7 +171,7 @@ class EmailValidationRegister
     function get_datetime()
     {
         $gmt_offset = get_option('gmt_offset');
-        $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $datetime;
     }
@@ -134,7 +183,7 @@ class EmailValidationRegister
     function get_date()
     {
         $gmt_offset = get_option('gmt_offset');
-        $date = date('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
+        $date = gmdate('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
 
         return $date;
     }
@@ -143,7 +192,7 @@ class EmailValidationRegister
     function get_time()
     {
         $gmt_offset = get_option('gmt_offset');
-        $time = date('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $time = gmdate('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $time;
     }

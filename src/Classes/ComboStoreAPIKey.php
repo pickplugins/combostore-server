@@ -1,12 +1,12 @@
 <?php
 
-namespace EmailValidation\Classes;
+namespace ComboStore\Classes;
 
 
 if (!defined('ABSPATH')) exit;  // if direct access
 
 
-class EmailValidationAPIKey
+class ComboStoreAPIKey
 {
     public $email = "";
     public $user_id = "";
@@ -246,7 +246,7 @@ class EmailValidationAPIKey
     function get_datetime()
     {
         $gmt_offset = get_option('gmt_offset');
-        $datetime = date('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $datetime;
     }
@@ -258,7 +258,7 @@ class EmailValidationAPIKey
     function get_date()
     {
         $gmt_offset = get_option('gmt_offset');
-        $date = date('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
+        $date = gmdate('Y-m-d', strtotime('+' . $gmt_offset . ' hour'));
 
         return $date;
     }
@@ -267,7 +267,7 @@ class EmailValidationAPIKey
     function get_time()
     {
         $gmt_offset = get_option('gmt_offset');
-        $time = date('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $time = gmdate('H:i:s', strtotime('+' . $gmt_offset . ' hour'));
 
         return $time;
     }
