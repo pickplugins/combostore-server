@@ -80,7 +80,7 @@ add_action('init', function () {
         combo_store_plugin_file,
         'pickplugins/combo-store-server', // CHANGE THIS
         combo_store_plugin_version,
-        '' // optional GitHub token
+        '' // optional GitHub token 1
     );
 });
 
