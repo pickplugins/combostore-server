@@ -84,8 +84,6 @@ add_action('init', function () {
     );
 });
 
-//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
-
 
 
 
