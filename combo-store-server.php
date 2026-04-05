@@ -83,7 +83,7 @@ add_action('init', function () {
         '' // optional GitHub token 1
     );
 });
-
+// no secret key needed as the repository is public, but you can generate one in GitHub and add it here if you want to avoid hitting rate limits
 
 
 
