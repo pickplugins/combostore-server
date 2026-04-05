@@ -6,6 +6,7 @@ if (!defined('ABSPATH')) exit();
 
 use WP_Error;
 use WP_REST_Request;
+use WP_User_Query;
 use Exception;
 use WC_Order_Query;
 use WC_Order;
@@ -28,6 +29,9 @@ use ComboStore\Classes\ComboStoreSubscriptionsToCall;
 use ComboStore\Classes\ComboStoreProduct;
 use ComboStore\Classes\ComboStoreDeliveries;
 use ComboStore\Classes\ComboStoreSubscriptions;
+use ComboStore\Classes\ComboStoreExpenses;
+use ComboStore\Classes\RedxCourier;
+use ComboStore\Classes\ComboStorePages;
 
 
 class ComboStoreRest
@@ -45,10 +49,105 @@ class ComboStoreRest
 
         register_rest_route(
             'combo-store/v2',
+            '/search_purchase_items',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'search_purchase_items'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/search_expense_items',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'search_expense_items'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/get_top_object_from_orders',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_top_object_from_orders'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_top_customers',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_top_customers'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/get_pages',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_pages'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/create_page',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'create_page'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/get_redx_areas',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_redx_areas'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_top_selling_products',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_top_selling_products'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+
+
+
+        register_rest_route(
+            'combo-store/v2',
             '/handle_external_login',
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'handle_external_login'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/send_to_courier',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'send_to_courier'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -176,6 +275,19 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/bulk_submit_users',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'bulk_submit_users'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
         register_rest_route(
             'combo-store/v2',
             '/bulk_submit_blog',
@@ -193,6 +305,15 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_post'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_page',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_page'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -222,6 +343,15 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'post_vote'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/steadfast_create_order',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'steadfast_create_order'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -289,6 +419,38 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/delete_page',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'delete_page'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/duplicate_page',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'duplicate_page'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/update_page',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_page'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
 
         register_rest_route(
             'combo-store/v2',
@@ -311,12 +473,24 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+
+
+
         register_rest_route(
             'combo-store/v2',
             '/get_order_notes',
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_order_notes'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/delete_order_note',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'delete_order_note'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -377,15 +551,24 @@ class ComboStoreRest
         );
 
 
-        // register_rest_route(
-        //     'combo-store/v2',
-        //     '/get_chart_data',
-        //     array(
-        //         'methods'  => 'POST',
-        //         'callback' => array($this, 'get_chart_data'),
-        //         'permission_callback' => '__return_true',
-        //     )
-        // );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_chart_data',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_chart_data'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_orders_stats',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_orders_stats'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -395,6 +578,15 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'delete_orders'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/duplicate_order',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'duplicate_order'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -468,6 +660,15 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_total_counts',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_total_counts'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -519,6 +720,15 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_products'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_low_stock_products',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_low_stock_products'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -726,6 +936,15 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_purchase',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_purchase'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -867,6 +1086,42 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/bulk_update_orders',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'bulk_update_orders'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+
+
+        register_rest_route(
+            'combo-store/v2',
+            '/update_purchase',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_purchase'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/update_expense',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_expense'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+
+
+
         register_rest_route(
             'combo-store/v2',
             '/update_order_items',
@@ -1320,6 +1575,145 @@ class ComboStoreRest
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
+    public function bulk_submit_users($request)
+    {
+
+        function is_json($string)
+        {
+            if (!is_string($string)) {
+                return false;
+            }
+
+            json_decode($string);
+            return (json_last_error() === JSON_ERROR_NONE);
+        }
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+
+        // $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        $post_content = $request->get_param('post_content');
+        $role = $request->get_param('role');
+
+        $response = [];
+
+
+        if (is_json($post_content)) {
+
+
+            $lines = json_decode($post_content);
+
+
+            foreach ($lines as $index => $line) {
+
+
+
+                $email = isset($line->email) ? $line->email : "";
+                $name = isset($line->name) ? $line->name : "";
+                $mobile = isset($line->mobile) ? $line->mobile : "";
+                $address = isset($line->address) ? $line->address : "";
+
+
+
+                $user_id = 0;
+
+
+                $ComboStoreRegister = new ComboStoreRegister();
+                $response_new_user = $ComboStoreRegister->create_user(['email' => $email, "password" => "", "role" => $role, "mobile" => $mobile]);
+
+                $new_user_res = json_decode($response_new_user, true);
+
+                $user_id = isset($new_user_res['user_id']) ? $new_user_res['user_id'] : 0;
+                $error = isset($new_user_res['error']) ? $new_user_res['error'] : false;
+
+
+
+
+                if (!empty($user_id) && !$error) {
+
+                    wp_update_user(array(
+                        'ID'           => $user_id,
+                        'display_name' => $name,
+                        'first_name' => $name,
+                    ));
+
+                    update_user_meta($user_id, 'address_1', $address);
+                    update_user_meta($user_id, 'phone', $mobile);
+
+                    $response['success'][$user_id] = true;
+                } else {
+                    $response['error'][$index] = true;
+                }
+            }
+        }
+
+
+        // Convert to array using newline as delimiter
+
+
+        //return;
+
+        // $tagNames = [];
+        // foreach ($tags as $tag) {
+        //     $tagNames[] = $tag;
+        // }
+
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
     public function set_thumbnail_from_url($request)
     {
 
@@ -1640,7 +2034,7 @@ class ComboStoreRest
 
 
         $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : 'DESC';
 
@@ -1735,7 +2129,7 @@ class ComboStoreRest
 
 
         $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : 'DESC';
 
@@ -1830,7 +2224,7 @@ class ComboStoreRest
         // $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
         $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
 
@@ -1939,158 +2333,16 @@ class ComboStoreRest
         $userRoles = isset($user->roles) ? $user->roles : [];
         $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
 
-        $page = ($page == 0) ? 1 : $page;
 
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
 
-        global $wpdb;
+        $body_arr['isAdmin'] = $isAdmin;
+        $body_arr['user_id'] = $user_id;
 
-        $prefix = $wpdb->prefix;
-
-        $table_orders = $prefix . 'cstore_orders';
-
-        $response = [];
-        $offset = ($page - 1) * $per_page;
-
-        $last_day = gmdate("Y-m-d");
-        $first_date = gmdate("Y-m-d", strtotime("7 days ago"));
-
-        //$entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE datetime BETWEEN '$first_date' AND '$last_day' ORDER BY id $order limit $offset, $per_page");
-
-        if ($isAdmin) {
-            $entries = $wpdb->get_results("SELECT * FROM $table_orders ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_orders");
-        } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_orders WHERE userid='$user_id'");
-        }
-
-
-
-
-        $big = 999999999; // need an unlikely integer
-
-
-
-
-
-
-
-
-        // Fix the total count query by removing the per_page clause
-
-        // Calculate max pages
-        $max_pages = ceil($total / $per_page);
-
-        $response['total'] = $total;
-
-        $response['max_pages'] = $max_pages;
-        $response['posts'] = $entries;
-
-
-        die(wp_json_encode($response));
-    }
-    /**
-     * Return Posts
-     *
-     * @since 1.0.0
-     * @param WP_REST_Request $request Post data.
-     */
-    public function get_expenses($request)
-    {
-        $token = $request->get_header('Authorization');
-
-
-        if (!$token) {
-            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-        }
-
-        // Remove "Bearer " prefix if present
-        $token = str_replace('Bearer ', '', $token);
-
-        // Decode the token
-        try {
-            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        } catch (Exception $e) {
-            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        }
-
-
-        // Get user by ID
-        // $user = get_user_by('id', $decoded_token->sub);
-
-
-
-        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-        if (!$user_id) {
-            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        }
-
-
-
-        $user = get_user_by('id', $user_id);
-
-        if (!$user) {
-            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
-        }
-
-        // $user_id = 1;
-        // $isAdmin = true;
-        $userRoles = isset($user->roles) ? $user->roles : [];
-        $isAdmin = in_array('administrator', $userRoles) ? true : false;
-
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
-
-        $page = ($page == 0) ? 1 : $page;
-
-
-        global $wpdb;
-
-        $prefix = $wpdb->prefix;
-
-        $table_expenses = $prefix . 'cstore_expenses';
-
-        $response = [];
-        $offset = ($page - 1) * $per_page;
-
-
-        if ($isAdmin) {
-            $entries = $wpdb->get_results("SELECT * FROM $table_expenses ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_expenses");
-        } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_expenses WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_expenses WHERE userid='$user_id'");
-        }
-
-
-
-
-        $big = 999999999; // need an unlikely integer
-
-
-
-
-
-
-
-
-        // Fix the total count query by removing the per_page clause
-
-        // Calculate max pages
-        $max_pages = ceil($total / $per_page);
-
-        $response['total'] = $total;
-
-        $response['max_pages'] = $max_pages;
-        $response['posts'] = $entries;
+        $ComboStoreOrders = new ComboStoreOrders();
+        $response = $ComboStoreOrders->get_orders($body_arr);
 
 
         die(wp_json_encode($response));
@@ -2145,57 +2397,96 @@ class ComboStoreRest
         $userRoles = isset($user->roles) ? $user->roles : [];
         $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
-
-        $page = ($page == 0) ? 1 : $page;
 
 
-        global $wpdb;
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
 
-        $prefix = $wpdb->prefix;
+        $body_arr['isAdmin'] = $isAdmin;
+        $body_arr['user_id'] = $user_id;
 
-        $table_purchases = $prefix . 'cstore_purchases';
-
-        $response = [];
-        $offset = ($page - 1) * $per_page;
-
-
-        if ($isAdmin) {
-            $entries = $wpdb->get_results("SELECT * FROM $table_purchases ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_purchases");
-        } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_purchases WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_purchases WHERE userid='$user_id'");
-        }
-
-
-
-
-        $big = 999999999; // need an unlikely integer
-
-
-
-
-
-
-
-
-        // Fix the total count query by removing the per_page clause
-
-        // Calculate max pages
-        $max_pages = ceil($total / $per_page);
-
-        $response['total'] = $total;
-
-        $response['max_pages'] = $max_pages;
-        $response['posts'] = $entries;
+        $ComboStorePurchases = new ComboStorePurchases();
+        $response = $ComboStorePurchases->get_purchases($body_arr);
 
 
         die(wp_json_encode($response));
     }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_expenses($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        // $user_id = 1;
+        // $isAdmin = true;
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
+
+        $body_arr['isAdmin'] = $isAdmin;
+        $body_arr['user_id'] = $user_id;
+
+        $ComboStoreExpenses = new ComboStoreExpenses();
+        $response = $ComboStoreExpenses->get_expenses($body_arr);
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2257,7 +2548,7 @@ class ComboStoreRest
         // $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
         $delivery_id     = isset($request['delivery_id']) ? sanitize_text_field($request['delivery_id']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
 
@@ -2363,7 +2654,7 @@ class ComboStoreRest
         $isRider = in_array('rider', $userRoles) ? true : false;
 
         $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "DESC";
 
@@ -2388,15 +2679,11 @@ class ComboStoreRest
             $entries = $wpdb->get_results("SELECT * FROM $table ORDER BY id $order limit $offset, $per_page");
             // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table ORDER BY id $order limit $offset, $per_page");
             $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table");
-        } 
-        elseif ($isRider) {
+        } elseif ($isRider) {
             $entries = $wpdb->get_results("SELECT * FROM $table WHERE rider_id='$user_id' ORDER BY id $order limit $offset, $per_page");
             // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table  ORDER BY id $order limit $offset, $per_page");
             $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table WHERE rider_id='$user_id'");
-        } 
-
-
-else {
+        } else {
             $entries = $wpdb->get_results("SELECT * FROM $table WHERE customer_id='$user_id' ORDER BY id $order limit $offset, $per_page");
             // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table  ORDER BY id $order limit $offset, $per_page");
             $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table WHERE customer_id='$user_id'");
@@ -2427,6 +2714,82 @@ else {
 
         die(wp_json_encode($response));
     }
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function send_to_courier($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        // $user_id = 1;
+        // $isAdmin = true;
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $isRider = in_array('rider', $userRoles) ? true : false;
+
+        $courier     = isset($request['courier']) ? sanitize_text_field($request['courier']) : '';
+        $order_id     = isset($request['order_id']) ? sanitize_text_field($request['order_id']) : "";
+
+
+
+        $app_response = apply_filters('cstore_send_to_courier_' . $courier, ["order_id" => $order_id]);
+
+        $response['posts'] = $app_response;
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
+
 
 
     /**
@@ -2473,7 +2836,7 @@ else {
         // $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
 
-        $paged     = isset($request['page']) ? absint($request['page']) : 1;
+        $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 20;
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
@@ -2732,6 +3095,89 @@ else {
 
         die(wp_json_encode($response));
     }
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_page($request)
+    {
+        // $token = $request->get_header('Authorization');
+
+
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
+
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
+
+        // // Decode the token
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
+
+
+
+        // $user = get_user_by('id', $user_id);
+
+        // if (!$user) {
+        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        // }
+
+        // $userRoles = isset($user->roles) ? $user->roles : [];
+        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+        $response = [];
+        $user_id = 1;
+        $post_id     = isset($request['id']) ? absint($request['id']) : 0;
+
+        $promptData = [];
+
+        $postData = get_post($post_id);
+
+        $content = isset($postData->post_content) ? $postData->post_content : null;
+
+
+
+        $promptData = [
+            "id" => isset($postData->ID) ? $postData->ID : null,
+            "title" => isset($postData->post_title) ? $postData->post_title : null,
+            "content" => !empty($content) ? $content : null,
+            "post_status" => isset($postData->post_status) ? $postData->post_status : null,
+            "post_type" => isset($postData->post_type) ? $postData->post_type : null,
+            "excerpt" => isset($postData->post_excerpt) ? $postData->post_excerpt : null,
+
+        ];
+
+
+
+        $response['post'] = $promptData;
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
+
     /**
      * Return Posts
      *
@@ -3031,6 +3477,7 @@ else {
         $parent     = isset($request['parent']) ? (int) $request['parent'] : 0;
         $hierarchical     = isset($request['hierarchical']) ? (bool) $request['hierarchical'] : false;
 
+        error_log("hierarchical: " . $hierarchical);
 
         $tax_obj = get_taxonomy($taxonomy);
 
@@ -3147,7 +3594,7 @@ else {
 
 
 
-        
+
 
         die(wp_json_encode($brands));
     }
@@ -3224,9 +3671,9 @@ else {
 
         $thumbnail = get_term_meta($term_id, "thumbnail", true);
 
-if($term){
-        $term->thumbnail = $thumbnail;
-}
+        if ($term) {
+            $term->thumbnail = $thumbnail;
+        }
 
         $response['term'] = $term;
 
@@ -3424,7 +3871,7 @@ if($term){
         if ($token) {
             //return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
 
-    // Remove "Bearer " prefix if present
+            // Remove "Bearer " prefix if present
             $token = str_replace('Bearer ', '', $token);
 
             // Decode the token
@@ -3451,12 +3898,9 @@ if($term){
 
             $userRoles = isset($user->roles) ? $user->roles : [];
             $isAdmin = in_array('administrator', $userRoles) ? true : false;
-
-
-
         }
 
-       
+
         $body = $request->get_body();
 
         $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
@@ -3475,7 +3919,6 @@ if($term){
 
 
 
-
         $query_args = [];
         $meta_query = [];
         $tax_query = [];
@@ -3483,7 +3926,7 @@ if($term){
         $query_args['post_type'] = 'product';
         $query_args['post_status'] = 'publish';
 
-        if($isAdmin){
+        if ($isAdmin) {
             $query_args['post_status'] = 'any';
         }
 
@@ -3554,11 +3997,6 @@ if($term){
 
 
 
-
-
-
-
-
         if (!empty($per_page)) {
             $query_args['posts_per_page'] = $per_page;
         }
@@ -3580,7 +4018,6 @@ if($term){
 
 
 
-
         $wp_query = new WP_Query($query_args);
 
 
@@ -3597,8 +4034,12 @@ if($term){
                 $post_thumbnail_url = get_the_post_thumbnail_url($post_id);
                 $featured = get_post_meta($post_id, 'featured', true);
                 $sku = get_post_meta($post_id, 'sku', true);
+                $bulkPrices = get_post_meta($post_id, 'bulkPrices', true);
+                $variablePrices = get_post_meta($post_id, 'variablePrices', true);
+                $priceType = get_post_meta($post_id, 'priceType', true);
                 $salePrice = get_post_meta($post_id, 'salePrice', true);
                 $regularPrice = get_post_meta($post_id, 'regularPrice', true);
+                $tradePrice = get_post_meta($post_id, 'tradePrice', true);
 
 
 
@@ -3686,25 +4127,25 @@ if($term){
                     "src" => $post_thumbnail_url,
                 ];
 
-// $new_entry = [];
+                // $new_entry = [];
 
-// $new_entry['id'] = isset($postData->ID) ? $postData->ID : null;
-// $new_entry['title'] = isset($postData->post_title) ? $postData->post_title : null;
-// $new_entry['slug'] = isset($postData->post_name) ? $postData->post_name : null;
-// $new_entry['status'] = isset($postData->post_status) ? $postData->post_status : null;
-// $new_entry['sku'] = $sku;
-// $new_entry['post_thumbnail'] = !empty($post_thumbnail) ? $post_thumbnail : [];
-// $new_entry['post_thumbnail_url'] = $post_thumbnail_url;
-// $new_entry['featured'] = $featured;
-// $new_entry['salePrice'] = $salePrice;
-// $new_entry['regularPrice'] = $regularPrice;
-// $new_entry['stockCount'] = $stock_quantity;
-// $new_entry['stockStatus'] = $stock_status;
-// $new_entry['categories'] = $categoriesData;
-// $new_entry['tags'] = $tagsData;
-// $new_entry['brands'] = $brandsData;
-// $new_entry['visibility'] = $visibilityData;
-// $new_entry['variations'] = $variations;
+                // $new_entry['id'] = isset($postData->ID) ? $postData->ID : null;
+                // $new_entry['title'] = isset($postData->post_title) ? $postData->post_title : null;
+                // $new_entry['slug'] = isset($postData->post_name) ? $postData->post_name : null;
+                // $new_entry['status'] = isset($postData->post_status) ? $postData->post_status : null;
+                // $new_entry['sku'] = $sku;
+                // $new_entry['post_thumbnail'] = !empty($post_thumbnail) ? $post_thumbnail : [];
+                // $new_entry['post_thumbnail_url'] = $post_thumbnail_url;
+                // $new_entry['featured'] = $featured;
+                // $new_entry['salePrice'] = $salePrice;
+                // $new_entry['regularPrice'] = $regularPrice;
+                // $new_entry['stockCount'] = $stock_quantity;
+                // $new_entry['stockStatus'] = $stock_status;
+                // $new_entry['categories'] = $categoriesData;
+                // $new_entry['tags'] = $tagsData;
+                // $new_entry['brands'] = $brandsData;
+                // $new_entry['visibility'] = $visibilityData;
+                // $new_entry['variations'] = $variations;
 
 
 
@@ -3718,9 +4159,13 @@ if($term){
                     "post_thumbnail" => !empty($post_thumbnail) ? $post_thumbnail : [],
                     "post_thumbnail_url" => $post_thumbnail_url,
                     "featured" => $featured,
+                    "tradePrice" => $tradePrice,
                     "salePrice" => $salePrice,
                     "regularPrice" => $regularPrice,
                     "price" => !empty($salePrice) ? $salePrice : $regularPrice,
+                    "priceType" => $priceType,
+                    "bulkPrices" => $bulkPrices,
+                    "variablePrices" => $variablePrices,
                     "categories" => $categoriesData,
                     "tags" => $tagsData,
                     "brands" => $brandsData,
@@ -3741,7 +4186,7 @@ if($term){
                     "variations" => $variations,
                 ];
 
- 
+
 
             endwhile;
             wp_reset_query();
@@ -3762,6 +4207,390 @@ if($term){
 
         die(wp_json_encode($response));
     }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_low_stock_products($request)
+    {
+        $token = $request->get_header('Authorization');
+
+        $isAdmin = false;
+
+        if ($token) {
+            //return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+
+            // Remove "Bearer " prefix if present
+            $token = str_replace('Bearer ', '', $token);
+
+            // Decode the token
+            try {
+                $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+            } catch (Exception $e) {
+                return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+            }
+
+
+            $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+            if (!$user_id) {
+                return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+            }
+
+
+
+            $user = get_user_by('id', $user_id);
+
+            if (!$user) {
+                return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+            }
+
+            $userRoles = isset($user->roles) ? $user->roles : [];
+            $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        }
+
+
+        $body = $request->get_body();
+
+        $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
+        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 6;
+        $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
+        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
+        $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
+        $category     = isset($request['category']) ? sanitize_text_field($request['category']) : "";
+        $categories     = isset($request['categories']) ? ($request['categories']) : [];
+        $brand     = isset($request['brand']) ? sanitize_text_field($request['brand']) : "";
+        $tag     = isset($request['tag']) ? sanitize_text_field($request['tag']) : "";
+        $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
+        $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
+
+        $is_admin     = isset($request['is_admin']) ? ($request['is_admin']) : false;
+
+
+
+        $query_args = [];
+        $meta_query = [];
+        $tax_query = [];
+
+        $query_args['post_type'] = 'product';
+        $query_args['post_status'] = 'publish';
+
+        if ($isAdmin) {
+            $query_args['post_status'] = 'any';
+        }
+
+
+
+
+        if (!empty($paged)) {
+            $query_args['paged'] = $paged;
+        }
+        if (!empty($keyword)) {
+            $query_args['s'] = $keyword;
+        }
+        if (!empty($post__in)) {
+            $query_args['post__in'] = $post__in;
+        }
+        if (!empty($post__not_in)) {
+            $query_args['post__not_in'] = [$post__not_in];
+        }
+
+        if (!empty($tag)) {
+            $tax_query[] = array(
+                'taxonomy' => 'product_tag',
+                'field'    => 'slug',
+                'terms'    => [$tag],
+                'operator'    => 'IN',
+            );
+        }
+
+
+        if (!empty($brand)) {
+            $tax_query[] = array(
+                'taxonomy' => 'product_brand',
+                'field'    => 'slug',
+                'terms'    => [$brand],
+                'operator'    => 'IN',
+            );
+        }
+
+
+
+        if (!empty($category)) {
+            $tax_query[] = array(
+                'taxonomy' => 'product_cat',
+                'field'    => 'slug',
+                'terms'    => [$category],
+                'operator'    => 'IN',
+            );
+        }
+
+        if (!empty($categories)) {
+            $tax_query[] = array(
+                'taxonomy' => 'product_cat',
+                'field'    => 'slug',
+                'terms'    => $categories,
+                'operator'    => 'IN',
+            );
+        }
+
+        if (!$is_admin) {
+
+            $tax_query[] = array(
+                'taxonomy' => 'product_visibility',
+                'field'    => 'slug',
+                'terms'    => ['exclude-from-search', 'exclude-from-catalog'],
+                'operator'    => 'NOT IN',
+            );
+        }
+
+
+
+
+        $meta_query = [
+            'relation' => 'AND',
+            array(
+                'key'     => 'stockStatus',
+                'value'   => 'instock',
+                'compare' => '='
+            ),
+            array(
+                'key'     => 'stockCount',
+                'value'   => 5,
+                'compare' => '<=',
+                'type'    => 'NUMERIC'
+            )
+
+        ];
+
+
+
+
+
+
+
+
+        if (!empty($per_page)) {
+            $query_args['posts_per_page'] = $per_page;
+        }
+        if (!empty($paged)) {
+            $query_args['paged'] = $paged;
+        }
+        if (!empty($orderby)) {
+            $query_args['orderby'] = $orderby;
+        }
+        if (!empty($order)) {
+            $query_args['order'] = $order;
+        }
+        if (!empty($meta_query)) {
+            $query_args['meta_query'] = $meta_query;
+        }
+        if (!empty($tax_query)) {
+            $query_args['tax_query'] = $tax_query;
+        }
+
+
+
+        $wp_query = new WP_Query($query_args);
+
+
+        $entries = [];
+
+        if ($wp_query->have_posts()) :
+            $count = 1;
+
+            while ($wp_query->have_posts()) : $wp_query->the_post();
+
+                $post_id = get_the_ID();
+                $postData = get_post($post_id);
+
+                $post_thumbnail_url = get_the_post_thumbnail_url($post_id);
+                $featured = get_post_meta($post_id, 'featured', true);
+                $sku = get_post_meta($post_id, 'sku', true);
+                $bulkPrices = get_post_meta($post_id, 'bulkPrices', true);
+                $variablePrices = get_post_meta($post_id, 'variablePrices', true);
+                $priceType = get_post_meta($post_id, 'priceType', true);
+                $salePrice = get_post_meta($post_id, 'salePrice', true);
+                $regularPrice = get_post_meta($post_id, 'regularPrice', true);
+                $tradePrice = get_post_meta($post_id, 'tradePrice', true);
+
+
+
+
+                $stockStatus = get_post_meta($post_id, 'stockStatus', true);
+                $stockCount = get_post_meta($post_id, 'stockCount', true);
+                $gallery = get_post_meta($post_id, 'gallery', true);
+                $addons = get_post_meta($post_id, 'addons', true);
+                $downloads = get_post_meta($post_id, 'downloads', true);
+                $weight = get_post_meta($post_id, 'weight', true);
+                $length = get_post_meta($post_id, 'length', true);
+                $width = get_post_meta($post_id, 'width', true);
+                $height = get_post_meta($post_id, 'height', true);
+                $upsells = get_post_meta($post_id, 'upsells', true);
+                $crosssells = get_post_meta($post_id, 'crosssells', true);
+                $faq = get_post_meta($post_id, 'faq', true);
+                $relatedProducts = get_post_meta($post_id, 'relatedProducts', true);
+                $variations = get_post_meta($post_id, 'variations', true);
+
+                $categories = get_the_terms($post_id, 'product_cat');
+                $categories = $categories ? $categories : [];
+
+                $tags = get_the_terms($post_id, 'product_tag');
+                $tags = $tags ? $tags : [];
+
+                $brands = get_the_terms($post_id, 'product_brand');
+                $brands = $brands ? $brands : [];
+
+                $visibility = get_the_terms($post_id, 'product_visibility');
+                $visibility = $visibility ? $visibility : [];
+
+
+
+
+
+                $categoriesData = [];
+                foreach ($categories as $index => $category) {
+
+
+
+                    $categoriesData[$index] = [
+                        "term_id" => $category->term_id,
+                        "name" => $category->name,
+                        "slug" => $category->slug,
+                    ];
+                }
+
+                $visibilityData = [];
+                foreach ($visibility as $index => $category) {
+
+
+
+                    $visibilityData[$index] = [
+                        "name" => $category->name,
+                        "slug" => $category->slug,
+                    ];
+                }
+
+
+                $tagsData = [];
+                foreach ($tags as $index => $tag) {
+
+                    $tagsData[$index] = [
+                        "term_id" => $tag->term_id,
+                        "name" => $tag->name
+                    ];
+                }
+
+                $brandsData = [];
+                foreach ($brands as $index => $brand) {
+
+                    $brandsData[$index] = [
+                        "term_id" => $brand->term_id,
+                        "name" => $brand->name
+                    ];
+                }
+
+
+
+
+
+                $post_thumbnail = [
+                    "id" => "",
+                    "title" => "",
+                    "src" => $post_thumbnail_url,
+                ];
+
+                // $new_entry = [];
+
+                // $new_entry['id'] = isset($postData->ID) ? $postData->ID : null;
+                // $new_entry['title'] = isset($postData->post_title) ? $postData->post_title : null;
+                // $new_entry['slug'] = isset($postData->post_name) ? $postData->post_name : null;
+                // $new_entry['status'] = isset($postData->post_status) ? $postData->post_status : null;
+                // $new_entry['sku'] = $sku;
+                // $new_entry['post_thumbnail'] = !empty($post_thumbnail) ? $post_thumbnail : [];
+                // $new_entry['post_thumbnail_url'] = $post_thumbnail_url;
+                // $new_entry['featured'] = $featured;
+                // $new_entry['salePrice'] = $salePrice;
+                // $new_entry['regularPrice'] = $regularPrice;
+                // $new_entry['stockCount'] = $stock_quantity;
+                // $new_entry['stockStatus'] = $stock_status;
+                // $new_entry['categories'] = $categoriesData;
+                // $new_entry['tags'] = $tagsData;
+                // $new_entry['brands'] = $brandsData;
+                // $new_entry['visibility'] = $visibilityData;
+                // $new_entry['variations'] = $variations;
+
+
+
+
+                $entries[] = [
+                    "id" => isset($postData->ID) ? $postData->ID : null,
+                    "title" => isset($postData->post_title) ? $postData->post_title : null,
+                    "slug" => isset($postData->post_name) ? $postData->post_name : null,
+                    "status" => isset($postData->post_status) ? $postData->post_status : null,
+                    "sku" => $sku,
+                    "post_thumbnail" => !empty($post_thumbnail) ? $post_thumbnail : [],
+                    "post_thumbnail_url" => $post_thumbnail_url,
+                    "featured" => $featured,
+                    "tradePrice" => $tradePrice,
+                    "salePrice" => $salePrice,
+                    "regularPrice" => $regularPrice,
+                    "price" => !empty($salePrice) ? $salePrice : $regularPrice,
+                    "priceType" => $priceType,
+                    "bulkPrices" => $bulkPrices,
+                    "variablePrices" => $variablePrices,
+                    "categories" => $categoriesData,
+                    "tags" => $tagsData,
+                    "brands" => $brandsData,
+                    "visibility" => $visibilityData,
+                    "stockStatus" => $stockStatus,
+                    "stockCount" => $stockCount,
+                    "gallery" => $gallery,
+                    "addons" => $addons,
+                    "downloads" => $downloads,
+                    "weight" => $weight,
+                    "length" => $length,
+                    "width" => $width,
+                    "height" => $height,
+                    "upsells" => $upsells,
+                    "crosssells" => $crosssells,
+                    "faq" => $faq,
+                    "relatedProducts" => $relatedProducts,
+                    "variations" => $variations,
+                ];
+
+
+
+            endwhile;
+            wp_reset_query();
+
+        else:
+
+
+        endif;
+
+        $total = $wp_query->found_posts;
+
+
+        $max_pages = ceil($total / $per_page);
+        $response['total'] = $total;
+        $response['max_pages'] = $max_pages;
+        $response['posts'] = $entries;
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
     /**
      * Return Posts
      *
@@ -4356,6 +5185,280 @@ if($term){
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
+    public function get_redx_areas($request)
+    {
+
+
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        $post_title = $request->get_param('title');
+        $post_status = $request->get_param('postStatus');
+
+
+
+
+        $response = [];
+
+        $RedxCourier = new RedxCourier();
+
+        $getAreas = $RedxCourier->getAreas();
+
+
+
+        die(wp_json_encode($getAreas));
+    }
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_top_object_from_orders($request)
+    {
+
+
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        // $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        // $post_title = $request->get_param('title');
+        // $post_status = $request->get_param('postStatus');
+
+
+
+
+        $response = [];
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        $getAreas = $ComboStoreStats->get_top_object_from_orders($body_arr);
+
+
+
+        die(wp_json_encode($getAreas));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_top_customers($request)
+    {
+
+
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        // $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        // $post_title = $request->get_param('title');
+        // $post_status = $request->get_param('postStatus');
+
+
+
+
+        $response = [];
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        $getAreas = $ComboStoreStats->get_top_customers($body_arr);
+
+
+
+        die(wp_json_encode($getAreas));
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_top_selling_products($request)
+    {
+
+
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        // $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        // $post_title = $request->get_param('title');
+        // $post_status = $request->get_param('postStatus');
+
+
+
+
+        $response = [];
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        $getTopSellingProducts = $ComboStoreStats->get_top_selling_products($body_arr);
+
+
+
+        die(wp_json_encode($getTopSellingProducts));
+    }
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
     public function get_coupon($request)
     {
         // $token = $request->get_header('Authorization');
@@ -4497,7 +5600,7 @@ if($term){
                 $post_id = $posts[0]; // first matching post ID
             } else {
                 $response['errors'] = true;
-                $response['message'] = __("Coupon doesn't exist.",'combo-store-server');
+                $response['message'] = __("Coupon doesn't exist.", 'combo-store-server');
                 die(wp_json_encode($response));
             }
         }
@@ -4567,6 +5670,341 @@ if($term){
         die(wp_json_encode($response));
     }
 
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_chart_data($request)
+    {
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+        $range     = isset($request['range']) ? sanitize_text_field($request['range']) : "7days";
+
+
+        if ($range == '7days') {
+            $days = 7;
+        }
+        if ($range == '15days') {
+            $days = 15;
+        }
+        if ($range == '30days') {
+            $days = 30;
+        }
+        if ($range == '6months') {
+            $days = 180;
+        }
+        if ($range == '1year') {
+            $days = 365;
+        }
+        if ($range == 'custom') {
+            $start_day = '';
+            $end_day = '';
+        }
+
+        // Get the date range (last 7 days)
+        $days_ago = gmdate('Y-m-d 00:00:00', strtotime("-$days days"));
+        $now = gmdate('Y-m-d 23:59:59');
+
+        $query_args = [
+            'start_date' => $days_ago,
+            'end_date' => $now,
+            'user_id' => $user_id,
+        ];
+
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        // $get_vote_range = $ComboStoreStats->get_vote_range($request);
+        $get_orders_range = $ComboStoreStats->get_orders_range($request);
+        $get_purchases_range = $ComboStoreStats->get_purchases_range($request);
+        $get_refunds_range = $ComboStoreStats->get_refunds_range($request);
+
+        $response['labels'] = $get_orders_range['labels'];
+        // $response['datasets'][0] = $get_views_range['dataset'];;
+        // $response['datasets'][1] = $get_loved_range['dataset'];;
+        // $response['datasets'][2] = $get_vote_range['dataset'];;
+        $response['datasets'][0] = $get_orders_range['dataset'];;
+        $response['datasets'][1] = $get_purchases_range['dataset'];;
+        $response['datasets'][2] = $get_refunds_range['dataset'];;
+
+        $total_products = $ComboStoreStats->total_products($user_id);
+        $total_customers = $ComboStoreStats->total_customers($user_id);
+        $total_orders = $ComboStoreStats->total_orders($query_args);
+        $total_subscriptions = $ComboStoreStats->total_subscriptions($query_args);
+        $total_orders_amount = $ComboStoreStats->get_orders_total_amount($query_args);
+        $total_discount_amount = $ComboStoreStats->get_total_discount_amount($query_args);
+        $total_tax_amount = $ComboStoreStats->get_total_tax_amount($query_args);
+        $total_shipping_amount = $ComboStoreStats->get_total_shipping_amount($query_args);
+        $total_gross_profit_amount = $ComboStoreStats->get_total_gross_profit_amount($query_args);
+        $total_net_profit_amount = $ComboStoreStats->get_total_net_profit_amount($query_args);
+
+        error_log(wp_json_encode($query_args));
+
+        $total_purchase_amount = $ComboStoreStats->get_purchase_total_amount($query_args);
+        $total_expenses_amount = $ComboStoreStats->get_expenses_total_amount($query_args);
+        $total_orders_due_amount = $ComboStoreStats->get_orders_total_due_amount($query_args);
+        $total_orders_pending_amount = $ComboStoreStats->get_orders_total_pending_amount($query_args);
+
+
+
+        $response['total_products'] = $total_products;
+        $response['total_customers'] = $total_customers;
+        $response['total_orders'] = $total_orders;
+        $response['total_subscriptions'] = $total_subscriptions;
+        $response['total_orders_amount'] = $total_orders_amount;
+        $response['total_discount_amount'] = $total_discount_amount;
+        $response['total_tax_amount'] = $total_tax_amount;
+        $response['total_gross_profit_amount'] = $total_gross_profit_amount;
+        $response['total_net_profit_amount'] = $total_net_profit_amount;
+
+        $response['total_shipping_amount'] = $total_shipping_amount;
+        $response['total_purchase_amount'] = $total_purchase_amount;
+        $response['total_expenses_amount'] = $total_expenses_amount;
+        $response['total_due_amount'] = $total_orders_due_amount;
+        $response['total_pending_amount'] = $total_orders_pending_amount;
+
+
+
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_orders_stats($request)
+    {
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+        $range     = isset($request['range']) ? sanitize_text_field($request['range']) : "7days";
+        $userid     = isset($request['userid']) ? sanitize_text_field($request['userid']) : null;
+        $product_id     = isset($request['product_id']) ? sanitize_text_field($request['product_id']) : null;
+        $orderStatus     = isset($request['orderStatus']) ? sanitize_text_field($request['orderStatus']) : null;
+        $paymentStatus     = isset($request['paymentStatus']) ? sanitize_text_field($request['paymentStatus']) : null;
+        $paymentMethod     = isset($request['paymentMethod']) ? sanitize_text_field($request['paymentMethod']) : null;
+
+
+        if ($range == '7days') {
+            $days = 7;
+        }
+        if ($range == '15days') {
+            $days = 15;
+        }
+        if ($range == '30days') {
+            $days = 30;
+        }
+        if ($range == '6months') {
+            $days = 180;
+        }
+        if ($range == '1year') {
+            $days = 365;
+        }
+        if ($range == 'custom') {
+            $start_day = '';
+            $end_day = '';
+        }
+
+        // Get the date range (last 7 days)
+        $days_ago = gmdate('Y-m-d 00:00:00', strtotime("-$days days"));
+        $now = gmdate('Y-m-d 23:59:59');
+
+        $query_args = [
+            'date_from' => $days_ago,
+            'date_to' => $now,
+            'userid' => $userid,
+            'product_id' => $product_id,
+            'orderStatus' => $orderStatus,
+            'paymentStatus' => $paymentStatus,
+            'paymentMethod' => $paymentMethod,
+        ];
+
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        $stats = $ComboStoreStats->get_orders_stats($query_args);
+        // $get_purchases_range = $ComboStoreStats->get_purchases_range($request);
+        // $get_refunds_range = $ComboStoreStats->get_refunds_range($request);
+
+        // $response['labels'] = $get_orders_range['labels'];
+        // $response['datasets'][0] = $get_orders_range['dataset'];;
+
+
+
+
+        die(wp_json_encode($stats));
+    }
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $post_data Post data.
+     */
+    public function get_total_counts($request)
+    {
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+
+
+
+        $ComboStoreStats = new ComboStoreStats();
+
+        // $get_vote_range = $ComboStoreStats->get_vote_range($request);
+        // $get_orders_range = $ComboStoreStats->get_orders_range($request);
+        // $get_purchases_range = $ComboStoreStats->get_purchases_range($request);
+
+        // $response['labels'] = $get_views_range['labels'];
+        // $response['datasets'][0] = $get_views_range['dataset'];;
+        // $response['datasets'][1] = $get_loved_range['dataset'];;
+        // $response['datasets'][2] = $get_vote_range['dataset'];;
+        // $response['datasets'][3] = $get_orders_range['dataset'];;
+        // $response['datasets'][4] = $get_purchases_range['dataset'];;
+
+        $total_products = $ComboStoreStats->total_products($user_id);
+        $total_customers = $ComboStoreStats->total_customers($user_id);
+        $total_orders = $ComboStoreStats->total_orders($user_id);
+        $total_subscriptions = $ComboStoreStats->total_subscriptions($user_id);
+
+
+        $response['total_products'] = $total_products;
+        $response['total_customers'] = $total_customers;
+        $response['total_orders'] = $total_orders;
+        $response['total_subscriptions'] = $total_subscriptions;
+
+
+
+
+
+        die(wp_json_encode($response));
+    }
 
 
     /**
@@ -5068,6 +6506,93 @@ if($term){
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
+    public function delete_order_note($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
+
+
+        $comment_id     = isset($request['comment_id']) ? absint($request['comment_id']) : 0;
+
+        $comment_args = [];
+        $meta_query = [];
+
+
+
+
+
+        if (empty($comment_id)) {
+            $response['success'] = false;
+            die(wp_json_encode($response));
+        }
+
+
+
+        $response = [];
+
+        $status = wp_delete_comment($comment_id, true);
+
+
+        if ($status) {
+            $response['success'] = true;
+        } else {
+            $response['success'] = false;
+        }
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
     public function add_coupon($request)
     {
         // $token = $request->get_header('Authorization');
@@ -5331,7 +6856,8 @@ if($term){
         $priceType = get_post_meta($post_id, 'priceType', true);
         $salePrice = get_post_meta($post_id, 'salePrice', true);
         $regularPrice = get_post_meta($post_id, 'regularPrice', true);
-        $bundlePrices = get_post_meta($post_id, 'bundlePrices', true);
+        $bulkPrices = get_post_meta($post_id, 'bulkPrices', true);
+        $variablePrices = get_post_meta($post_id, 'variablePrices', true);
 
         $pwywMinPrice = get_post_meta($post_id, 'pwywMinPrice', true);
         $pwywDefaultPrice = get_post_meta($post_id, 'pwywDefaultPrice', true);
@@ -5510,7 +7036,8 @@ if($term){
             "priceType" => $priceType,
             "salePrice" => $salePrice,
             "regularPrice" => $regularPrice,
-            "bundlePrices" => $bundlePrices ? $bundlePrices : [],
+            "bulkPrices" => $bulkPrices ? $bulkPrices : [],
+            "variablePrices" => $variablePrices ? $variablePrices : [],
             "pwywMinPrice" => $pwywMinPrice,
             "pwywDefaultPrice" => $pwywDefaultPrice,
 
@@ -5924,7 +7451,7 @@ if($term){
         $brands = $request->get_param('brands');
         $tradePrice = $request->get_param('tradePrice');
 
-
+        error_log("post_status: " . $post_status);
 
         $tags = $tags ? $tags : [];
         $brands = $brands ? $brands : [];
@@ -5979,109 +7506,128 @@ if($term){
 
         wp_set_post_terms($post_id, $visibilityIds, 'product_visibility');
 
-        
+
 
         set_post_thumbnail($post_id, $post_thumbnail_id);
 
+        // $ComboStoreProduct = new ComboStoreProduct();
 
+        // $response = $ComboStoreProduct->update_product_data($body_arr);
 
-        if (isset($body_arr['sku'])) {
+        error_log("featured: " . $body_arr['featured']);
+
+        if (!empty($body_arr['sku'])) {
             update_post_meta($post_id, 'sku', $body_arr['sku']);
         }
-        if (isset($body_arr['menuOrder'])) {
+        if (!empty($body_arr['menuOrder'])) {
             update_post_meta($post_id, 'menuOrder', $body_arr['menuOrder']);
         }
-        if (isset($body_arr['featured'])) {
+        if (!empty($body_arr['featured'])) {
             update_post_meta($post_id, 'featured', $featured);
         }
-        if (isset($body_arr['priceType'])) {
+        if (empty($body_arr['featured'])) {
+            delete_post_meta($post_id, 'featured', $featured);
+        }
+
+
+
+        if (!empty($body_arr['priceType'])) {
             update_post_meta($post_id, 'priceType', $body_arr['priceType']);
         }
-        if (isset($body_arr['salePrice'])) {
-
+        if (!empty($body_arr['salePrice'])) {
             update_post_meta($post_id, 'salePrice', $body_arr['salePrice']);
         }
-        if (isset($body_arr['regularPrice'])) {
+        if (!empty($body_arr['regularPrice'])) {
             update_post_meta($post_id, 'regularPrice', $body_arr['regularPrice']);
         }
 
 
-        if (isset($body_arr['bundlePrices'])) {
-            update_post_meta($post_id, 'bundlePrices', $body_arr['bundlePrices']);
+        if (!empty($body_arr['bulkPrices'])) {
+            update_post_meta($post_id, 'bulkPrices', $body_arr['bulkPrices']);
+        }
+        if (!empty($body_arr['variablePrices'])) {
+            update_post_meta($post_id, 'variablePrices', $body_arr['variablePrices']);
         }
 
 
-        if (isset($body_arr['pwywMinPrice'])) {
+        if (!empty($body_arr['pwywMinPrice'])) {
             update_post_meta($post_id, 'pwywMinPrice', $body_arr['pwywMinPrice']);
         }
-        if (isset($body_arr['pwywDefaultPrice'])) {
+        if (!empty($body_arr['pwywDefaultPrice'])) {
             update_post_meta($post_id, 'pwywDefaultPrice', $body_arr['pwywDefaultPrice']);
         }
-        if (isset($body_arr['bargainMinPrice'])) {
+        if (!empty($body_arr['bargainMinPrice'])) {
             update_post_meta($post_id, 'bargainMinPrice', $body_arr['bargainMinPrice']);
         }
-        if (isset($body_arr['bargainDefaultPrice'])) {
+        if (!empty($body_arr['bargainDefaultPrice'])) {
             update_post_meta($post_id, 'bargainDefaultPrice', $body_arr['bargainDefaultPrice']);
         }
 
 
-        if (isset($body_arr['tradePrice'])) {
+        if (!empty($body_arr['tradePrice'])) {
             update_post_meta($post_id, 'tradePrice', $body_arr['tradePrice']);
         }
 
 
 
-        if (isset($body_arr['stockStatus'])) {
+        if (!empty($body_arr['stockStatus'])) {
             update_post_meta($post_id, 'stockStatus', $body_arr['stockStatus']);
         }
-        if (isset($body_arr['stockCount'])) {
+
+
+        if (!empty($body_arr['stockCount'])) {
             update_post_meta($post_id, 'stockCount', $body_arr['stockCount']);
+        } else {
+            delete_post_meta($post_id, 'stockCount');
         }
-        if (isset($body_arr['gallery'])) {
+
+
+
+        if (!empty($body_arr['gallery'])) {
             $gallery = maybe_json_decode($body_arr['gallery']);
             update_post_meta($post_id, 'gallery', $gallery);
         }
-        if (isset($body_arr['addons'])) {
+        if (!empty($body_arr['addons'])) {
             $addons = maybe_json_decode($body_arr['addons']);
             update_post_meta($post_id, 'addons', $addons);
         }
-        if (isset($body_arr['downloads'])) {
+        if (!empty($body_arr['downloads'])) {
             $downloads = maybe_json_decode($body_arr['downloads']);
             update_post_meta($post_id, 'downloads', $downloads);
         }
-        if (isset($body_arr['weight'])) {
+        if (!empty($body_arr['weight'])) {
             $weight = maybe_json_decode($body_arr['weight']);
             update_post_meta($post_id, 'weight', $weight);
         }
-        if (isset($body_arr['length'])) {
+        if (!empty($body_arr['length'])) {
             $length = maybe_json_decode($body_arr['length']);
             update_post_meta($post_id, 'length', $length);
         }
-        if (isset($body_arr['width'])) {
+        if (!empty($body_arr['width'])) {
             $width = maybe_json_decode($body_arr['width']);
             update_post_meta($post_id, 'width', $width);
         }
-        if (isset($body_arr['height'])) {
+        if (!empty($body_arr['height'])) {
             $height = maybe_json_decode($body_arr['height']);
             update_post_meta($post_id, 'height', $height);
         }
-        if (isset($body_arr['upsells'])) {
+        if (!empty($body_arr['upsells'])) {
             $upsells = maybe_json_decode($body_arr['upsells']);
             update_post_meta($post_id, 'upsells', $upsells);
         }
-        if (isset($body_arr['crosssells'])) {
+        if (!empty($body_arr['crosssells'])) {
             $crosssells = maybe_json_decode($body_arr['crosssells']);
             update_post_meta($post_id, 'crosssells', $crosssells);
         }
-        if (isset($body_arr['faq'])) {
+        if (!empty($body_arr['faq'])) {
             $faq = maybe_json_decode($body_arr['faq']);
             update_post_meta($post_id, 'faq', $faq);
         }
-        if (isset($body_arr['relatedProducts'])) {
+        if (!empty($body_arr['relatedProducts'])) {
             $relatedProducts = maybe_json_decode($body_arr['relatedProducts']);
             update_post_meta($post_id, 'relatedProducts', $relatedProducts);
         }
-        if (isset($body_arr['variations'])) {
+        if (!empty($body_arr['variations'])) {
             $variations = maybe_json_decode($body_arr['variations']);
             update_post_meta($post_id, 'variations', $variations);
         }
@@ -6158,7 +7704,7 @@ if($term){
             $response['status'] = "success";
             $response['order_id'] = $order_id;
             $response['order_hash'] = $order_hash;
-            $response['message'] = "Purchased Successful.";
+            $response['message'] = "Order Created Successful.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -6177,38 +7723,39 @@ if($term){
      */
     public function create_expense($request)
     {
-        // $token = $request->get_header('Authorization');
+        $token = $request->get_header('Authorization');
 
 
-        // if (!$token) {
-        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-        // }
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
 
-        // // Remove "Bearer " prefix if present
-        // $token = str_replace('Bearer ', '', $token);
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
 
-        // // Decode the token
-        // try {
-        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        // } catch (Exception $e) {
-        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        // }
-
-
-        // // Get user by ID
-        // // $user = get_user_by('id', $decoded_token->sub);
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
 
 
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
 
-        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
 
-        // if (!$user_id) {
-        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        // }
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
 
+        $body_arr['created_by'] = $user_id;
 
         // $user_id = 1;
 
@@ -6253,34 +7800,34 @@ if($term){
      */
     public function create_purchase($request)
     {
-        // $token = $request->get_header('Authorization');
+        $token = $request->get_header('Authorization');
 
 
-        // if (!$token) {
-        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-        // }
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
 
-        // // Remove "Bearer " prefix if present
-        // $token = str_replace('Bearer ', '', $token);
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
 
-        // // Decode the token
-        // try {
-        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        // } catch (Exception $e) {
-        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        // }
-
-
-        // // Get user by ID
-        // // $user = get_user_by('id', $decoded_token->sub);
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
 
 
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
 
-        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
 
-        // if (!$user_id) {
-        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        // }
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
@@ -6304,7 +7851,7 @@ if($term){
 
         // }
 
-        $order_response = $ComboStorePurchases->create($body_arr);
+        $order_response = $ComboStorePurchases->create_purchase($body_arr);
         $order_id = isset($order_response['id']) ? $order_response['id'] : 0;
 
 
@@ -6589,7 +8136,7 @@ if($term){
 
         $status = update_option('combo_store_settings', $body_arr);
 
-        
+
 
         if ($status) {
             $response['status'] = "success";
@@ -6638,29 +8185,47 @@ if($term){
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        $settings = get_option('combo_store_settings');
 
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
+        $invoice     = isset($request['invoice']) ? sanitize_text_field($request['invoice']) : '';
+        $recipient_name     = isset($request['recipient_name']) ? sanitize_text_field($request['recipient_name']) : '';
+        $recipient_phone     = isset($request['recipient_phone']) ? sanitize_text_field($request['recipient_phone']) : '';
+        $alternative_phone     = isset($request['alternative_phone']) ? sanitize_text_field($request['alternative_phone']) : '';
+        $recipient_email     = isset($request['recipient_email']) ? sanitize_text_field($request['recipient_email']) : '';
+        $recipient_address     = isset($request['recipient_address']) ? sanitize_text_field($request['recipient_address']) : '';
+        $cod_amount     = isset($request['cod_amount']) ? sanitize_text_field($request['cod_amount']) : '';
+        $note     = isset($request['note']) ? sanitize_text_field($request['note']) : '';
+        $item_description     = isset($request['item_description']) ? sanitize_text_field($request['item_description']) : '';
+        $total_lot     = isset($request['total_lot']) ? sanitize_text_field($request['total_lot']) : '';
+        $delivery_type     = isset($request['delivery_type']) ? sanitize_text_field($request['delivery_type']) : '';
+
 
 
 
 
         $response = [];
 
-        $status = update_option('combo_store_settings', $body_arr);
+        $steadfast = new SteadfastCourier();
+        $status = $steadfast->createOrder([
+            'invoice' => $invoice,
+            'recipient_name' => $recipient_name,
+            'recipient_phone' => $recipient_phone,
+            'alternative_phone' => $alternative_phone,
+            'recipient_address' => $recipient_address,
+            'cod_amount' => $cod_amount,
+            'note' => $note,
+            'item_description' => $item_description,
+            'total_lot' => $total_lot,
+            'delivery_type' => $delivery_type,
+        ]);
 
-        
 
-        if ($status) {
-            $response['status'] = "success";
-            $response['message'] = "Settings updated.";
-        } else {
-            $response['status'] = "failed";
-            $response['message'] = "There is an error.";
-        }
 
-        die(wp_json_encode($response));
+
+        die(wp_json_encode($status));
     }
 
 
@@ -6722,7 +8287,7 @@ if($term){
 
         if ($_response) {
             $response['status'] = "success";
-            $response['message'] = "Subscription updated.";
+            $response['message'] = "Order updated.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -6732,6 +8297,225 @@ if($term){
 
         die(wp_json_encode($response));
     }
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function bulk_update_orders($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $body = $request->get_body();
+
+
+        $body_arr = json_decode($body, true);
+
+
+
+
+        $response = [];
+
+        $gmt_offset = get_option('gmt_offset');
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $ComboStoreOrders = new ComboStoreOrders();
+
+
+        $_response = $ComboStoreOrders->bulk_update_orders($body_arr);
+
+
+        if ($_response) {
+            $response['status'] = "success";
+            $response['message'] = "Order updated.";
+        } else {
+            $response['status'] = "failed";
+            $response['message'] = "There is an error.";
+        }
+
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_purchase($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $body = $request->get_body();
+
+
+        $body_arr = json_decode($body, true);
+
+
+
+
+        $response = [];
+
+        $gmt_offset = get_option('gmt_offset');
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $ComboStorePurchases = new ComboStorePurchases();
+
+
+        $_response = $ComboStorePurchases->update_purchase($body_arr);
+
+
+        if ($_response) {
+            $response['status'] = "success";
+            $response['message'] = "Purchase updated.";
+        } else {
+            $response['status'] = "failed";
+            $response['message'] = "There is an error.";
+        }
+
+
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_expense($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $body = $request->get_body();
+
+
+        $body_arr = json_decode($body, true);
+
+        $body_arr['created_by'] = $user_id;
+
+
+        $response = [];
+
+        $gmt_offset = get_option('gmt_offset');
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+        $ComboStoreExpenses = new ComboStoreExpenses();
+
+
+        $_response = $ComboStoreExpenses->update_expense($body_arr);
+
+
+        if ($_response) {
+            $response['status'] = "success";
+            $response['message'] = "Expense updated.";
+        } else {
+            $response['status'] = "failed";
+            $response['message'] = "There is an error.";
+        }
+
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
     /**
      * Return Posts
      *
@@ -6790,7 +8574,7 @@ if($term){
 
         if ($_response) {
             $response['status'] = "success";
-            $response['message'] = "Subscription updated.";
+            $response['message'] = "Order items updated.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -6868,7 +8652,7 @@ if($term){
 
         if ($_response) {
             $response['status'] = "success";
-            $response['message'] = "Subscription updated.";
+            $response['message'] = "Delivery updated.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -7851,10 +9635,13 @@ if($term){
         $ComboStoreObjectMeta = new ComboStoreObjectMeta();
 
         $delivery_location = $ComboStoreObjectMeta->get_meta('orders', $order_id, "delivery_location");
+        $advance_payment_note = $ComboStoreObjectMeta->get_meta('orders', $order_id, "advance_payment_note");
+        $coupons = $ComboStoreObjectMeta->get_meta('orders', $order_id, "coupons");
 
 
 
         $orderRow['delivery_location'] = json_decode($delivery_location);
+        $orderRow['advance_payment_note'] = $advance_payment_note;
 
         // $licenseRow = $wpdb->get_row(
         //     $wpdb->prepare(
@@ -7908,13 +9695,328 @@ if($term){
 
         $response['line_items'] = $order_items;
         $response['order'] = $orderRow;
-        // $response['license'] = $licenseRow;
+        $response['coupons'] = json_decode($coupons);
         $response['subscription'] = $subscriptionRow;
         $response['delivery'] = $deliveryRow;
 
 
         die(wp_json_encode($response));
     }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function search_purchase_items($request)
+    {
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : 0;
+
+
+
+
+        $response = [];
+
+
+
+
+
+        $line_items = [];
+
+        $ComboStorePurchases = new ComboStorePurchases();
+
+
+        $order_items = $ComboStorePurchases->search_purchase_items($keyword);
+
+
+
+
+        die(wp_json_encode($order_items));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function search_expense_items($request)
+    {
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : 0;
+
+
+
+
+        $response = [];
+
+
+
+
+
+        $line_items = [];
+
+        $ComboStoreExpenses = new ComboStoreExpenses();
+
+
+        $order_items = $ComboStoreExpenses->search_expense_items($keyword);
+
+
+
+
+        die(wp_json_encode($order_items));
+    }
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_purchase($request)
+    {
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $purchase_id     = isset($request['id']) ? absint($request['id']) : 0;
+
+
+        $ComboStorePurchases = new ComboStorePurchases();
+        $response = $ComboStorePurchases->get_purchase($purchase_id);
+
+        die(wp_json_encode($response));
+    }
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_pages($request)
+    {
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $purchase_id     = isset($request['id']) ? absint($request['id']) : 0;
+
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
+
+        $ComboStorePages = new ComboStorePages();
+        $response = $ComboStorePages->get_pages($body_arr);
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function create_page($request)
+    {
+
+
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        $userRoles = isset($user->roles) ? $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+
+        $body = $request->get_body();
+        $body_arr = json_decode($body, true);
+        $ComboStorePages = new ComboStorePages();
+
+        $response = $ComboStorePages->create_page($body_arr);
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
     /**
      * Return Posts
      *
@@ -7960,44 +10062,16 @@ if($term){
 
         $userRoles = isset($user->roles) ? $user->roles : [];
         $isAdmin = in_array('administrator', $userRoles) ? true : false;
-        $order_id     = isset($request['id']) ? absint($request['id']) : 0;
+        $purchase_id     = isset($request['id']) ? absint($request['id']) : 0;
 
 
-        global $wpdb;
-
-        $prefix = $wpdb->prefix;
-
-        $table_expenses = $prefix . 'cstore_expenses';
-
-        //$table_licenses = $prefix . 'cstore_licenses';
-
-        $response = [];
-
-
-
-
-        $expenseRow = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT * FROM $table_expenses WHERE id = %d",
-                $order_id
-            ),
-            ARRAY_A
-        );
-
-
-
-
-
-
-
-
-
-
-        $response['expense'] = $expenseRow;
-
+        $ComboStoreExpenses = new ComboStoreExpenses();
+        $response = $ComboStoreExpenses->get_expense($purchase_id);
 
         die(wp_json_encode($response));
     }
+
+
 
 
 
@@ -8210,7 +10284,7 @@ if($term){
 
         $delivery = $ComboStoreDeliveries->get_delivery($order_id, $delivery_id);
 
-        
+
 
         $response['delivery'] = ($delivery);
 
@@ -8273,7 +10347,7 @@ if($term){
 
 
         $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['page']) ? absint($request['page']) : 1;
+        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
         $order     = isset($request['order']) ? absint($request['order']) : "DESC";
 
@@ -8551,6 +10625,9 @@ if($term){
     public function check_mobile_fraud($request)
     {
 
+
+        $responses = [];
+
         $token = $request->get_header('Authorization');
 
 
@@ -8580,32 +10657,110 @@ if($term){
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
-        $phone     = isset($request['phone']) ? sanitize_text_field($request['phone']) : '01712345678';
+        $phone     = isset($request['phone']) ? sanitize_text_field($request['phone']) : '';
 
 
-    $api_key = "639c1229059b1d33550823c8dca5908e";
+        if (empty($phone)) {
+            $responses['errors'] = true;
+            $responses['message'] = 'Phone number is required';
+            die(wp_json_encode($responses));
+        }
 
-    $url = "https://fraudchecker.link/api/v1/qc/";
-    $data = array('phone' => $phone);
 
-    $options = array(
-        'http' => array(
-            'header' => "Authorization: Bearer " . $api_key . "\r\n" .
+        $api_key = "6ZRPQgVScjihVVdqpInz1Oyik6Gwlx2mpenMHCGTYnV9okKca7kFcohYFicf";
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, "https://api.bdcourier.com/courier-check");
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(["phone" => $phone]));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Content-Type: application/json",
+            "Authorization: Bearer $api_key"
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+
+        $responses['errors'] = false;
+        $responses['data'] = $response;
+        die(wp_json_encode($responses));
+    }
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function check_mobile_fraud_bk($request)
+    {
+
+
+        $responses = [];
+
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $phone     = isset($request['phone']) ? sanitize_text_field($request['phone']) : '';
+
+
+        if (empty($phone)) {
+            $responses['errors'] = true;
+            $responses['message'] = 'Phone number is required';
+            die(wp_json_encode($responses));
+        }
+
+
+        $api_key = "8113cfb824443bc946ece74ed557c510";
+
+        $url = "https://fraudchecker.link/api/v1/qc/";
+        $data = array('phone' => $phone);
+
+        $options = array(
+            'http' => array(
+                'header' => "Authorization: Bearer " . $api_key . "\r\n" .
                     "Content-type: application/x-www-form-urlencoded\r\n",
-            'method' => 'POST',
-            'content' => http_build_query($data)
-        )
-    );
+                'method' => 'POST',
+                'content' => http_build_query($data)
+            )
+        );
 
-    $context = stream_context_create($options);
-    $response = file_get_contents($url, false, $context);
-
-error_log($response);
-
-    $result = json_decode($response, true);
+        $context = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
 
 
-        return rest_ensure_response($result);
+        $result = json_decode($response, true);
+
+
+        $responses['errors'] = false;
+        $responses['data'] = $result;
+        die(wp_json_encode($responses));
     }
 
 
@@ -9000,6 +11155,11 @@ error_log($response);
 
         $rider = get_user_by('id', $id);
 
+        if (!$rider) {
+            $response['errors'] = 'User not found';
+            die(wp_json_encode($response));
+        }
+
         $first_name              = get_user_meta($id,  "first_name", true);
         $last_name              = get_user_meta($id,  "last_name", true);
         $email              = isset($rider->user_email) ? $rider->user_email : '';
@@ -9011,25 +11171,25 @@ error_log($response);
         $city              = get_user_meta($id,  "city", true);
         $delivery_location              = get_user_meta($id,  "delivery_location", true);
 
- 
+
 
         $response['customer'] = array(
-                'id' => $rider->ID,
-                'email' => $rider->user_email,
-                'name'  => $rider->display_name,
-                'avatar'  => get_avatar_url($rider->user_email),
-                'roles'  => $rider->roles,
-                'first_name'  => $first_name,
-                'last_name'  => $last_name,
-                'phone'  => $phone,
-                'address_1'  => $address_1,
-                'address_2'  => $address_2,
-                'zip_code'  => $zip_code,
-                'country'  => $country,
-                'city'  => $city,
-                'delivery_location'  => $delivery_location,
+            'id' => $rider->ID,
+            'email' => $rider->user_email,
+            'name'  => $rider->display_name,
+            'avatar'  => get_avatar_url($rider->user_email),
+            'roles'  => $rider->roles,
+            'first_name'  => $first_name,
+            'last_name'  => $last_name,
+            'phone'  => $phone,
+            'address_1'  => $address_1,
+            'address_2'  => $address_2,
+            'zip_code'  => $zip_code,
+            'country'  => $country,
+            'city'  => $city,
+            'delivery_location'  => $delivery_location,
 
-            );
+        );
 
 
 
@@ -9182,32 +11342,25 @@ error_log($response);
         }
 
 
-
-
-
-
-
-
-        $role     = isset($request['role']) ? sanitize_text_field($request['role']) : '';
+        $role     = isset($request['role']) ? sanitize_text_field($request['role']) : 'any';
         $search     = isset($request['search']) ? sanitize_text_field($request['search']) : "";
         $number     = isset($request['number']) ? sanitize_text_field($request['number']) : "";
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
-        $paged      = isset($request['paged ']) ? sanitize_text_field($request['paged ']) : "";
-
-
+        $paged      = isset($request['paged']) ? sanitize_text_field($request['paged']) : 1;
 
         $prevText = !empty($request['prevText']) ? $request['prevText'] : "";
         $nextText = !empty($request['nextText']) ? $request['nextText'] : "";
         $maxPageNum = !empty($request['maxPageNum']) ? $request['maxPageNum'] : 0;
-        $paged = 1;
+        // $paged = 1;
         $query_args = [];
+
 
         if ($role) {
             $query_args['role'] = $role;
         }
         if ($search) {
-            $query_args['search'] = $search;
+            $query_args['search'] = '*' . $search . '*';
         }
         if ($number) {
             $query_args['number'] = $number;
@@ -9222,10 +11375,19 @@ error_log($response);
             $query_args['order'] = $order;
         }
 
+        // $query_args['fields'] = array( 'display_name' );
+
+
+        error_log(wp_json_encode($query_args));
+
 
         $posts = [];
         $responses = [];
-        $terms = get_users($query_args);
+        // $terms = get_users($query_args);
+
+        $user_search = new WP_User_Query($query_args);
+        $terms = $user_search->get_results();
+
         if ($terms) :
             $responses['noPosts'] = false;
             foreach ($terms as  $term) :
@@ -9247,7 +11409,20 @@ error_log($response);
 
                 $posts[] = $user_data;
             endforeach;
+
+            $total = $user_search->get_total();
+
+
+
+
+            $max_pages = ceil($total / $number);
+
+
+            $responses['total'] = $total;
+            $responses['max_pages'] = $max_pages;
             $responses['posts'] = $posts;
+
+
         else :
             $responses['noPosts'] = true;
         endif;
@@ -9405,10 +11580,11 @@ error_log($response);
 
 
         $email     = isset($request['email']) ? sanitize_email($request['email']) : '';
+        $mobile     = isset($request['mobile']) ? sanitize_text_field($request['mobile']) : '';
+
         $registerBy     = isset($request['registerBy']) ? sanitize_text_field($request['registerBy']) : '';
         $password     = isset($request['password']) ? sanitize_text_field($request['password']) : '';
         $role     = isset($request['role']) ? sanitize_text_field($request['role']) : '';
-        $mobile     = isset($request['mobile']) ? sanitize_text_field($request['mobile']) : '';
 
 
         $ComboStoreRegister = new ComboStoreRegister();
@@ -9416,7 +11592,7 @@ error_log($response);
         $response = [];
 
 
-        $response = $ComboStoreRegister->create_user(['email' => $email, "password" => $password, "role" => $role, "mobile" => $mobile]);
+        $response = $ComboStoreRegister->create_user(['email' => $email, "password" => $password, "role" => $role, "mobile" => $mobile, "registerBy" => $registerBy]);
 
 
 
@@ -9503,6 +11679,62 @@ error_log($response);
         // if (!$inserted) {
         //     $response['errors'] = true;
         // }
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function duplicate_order($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+        $order_id     = isset($request['id']) ? ($request['id']) : [];
+
+
+
+        $gmt_offset = get_option('gmt_offset');
+        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
+
+
+        $ComboStoreOrders = new ComboStoreOrders();
+
+
+
+        $response = $ComboStoreOrders->duplicate_order($order_id);
+
+
 
         die(wp_json_encode($response));
     }
@@ -10494,6 +12726,222 @@ error_log($response);
         die(wp_json_encode($response));
     }
 
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function delete_page($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        //Get user by ID
+        $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+        $id     = isset($request['id']) ? ($request['id']) : null;
+
+
+        $response = [];
+
+
+
+        if (!empty($id)) {
+
+            wp_delete_post($id, false);
+        }
+
+        $response['success'] = true;
+
+
+
+
+        die(wp_json_encode($response));
+    }
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function duplicate_page($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        //Get user by ID
+        $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+
+        $id     = isset($request['id']) ? ($request['id']) : null;
+
+
+        $response = [];
+
+        $post = get_post($id);
+
+        if ($post) {
+
+            $new_post = array(
+                'post_title'   => $post->post_title . ' (Copy)',
+                'post_content' => $post->post_content,
+                'post_status'  => 'draft',
+                'post_type'    => $post->post_type,
+                'post_author'  => get_current_user_id(),
+                'post_excerpt' => $post->post_excerpt
+            );
+
+            $new_post_id = wp_insert_post($new_post);
+
+
+            // Copy post meta
+            $post_meta = get_post_meta($id);
+            foreach ($post_meta as $key => $values) {
+                foreach ($values as $value) {
+                    add_post_meta($new_post_id, $key, maybe_unserialize($value));
+                }
+            }
+
+            $response['success'] = true;
+        }
+
+
+
+
+
+        die(wp_json_encode($response));
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_page($request)
+    {
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        //Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+
+        $id     = isset($request['id']) ? ($request['id']) : null;
+        $blocks     = isset($request['blocks']) ? ($request['blocks']) : null;
+
+        error_log($id);
+        error_log(wp_json_encode($blocks));
+
+        $response = [];
+
+
+
+        if (!empty($id)) {
+
+            $my_post = array(
+                'ID'           => $id,
+                'post_content' => wp_json_encode($blocks),
+            );
+            wp_update_post($my_post);
+            $response['success'] = true;
+        } else {
+            $response['success'] = false;
+        }
+
+
+
+
+
+        die(wp_json_encode($response));
+    }
+
 
 
     /**
@@ -10601,12 +13049,11 @@ error_log($response);
 
         $post_id     = isset($request['id']) ? ($request['id']) : [];
 
-error_log("post_id: $post_id");
 
         $response = [];
 
         if (!empty($post_id)) {
-           
+
 
             $post = get_post($post_id);
 
@@ -10655,17 +13102,7 @@ error_log("post_id: $post_id");
                         add_post_meta($new_post_id, $key, maybe_unserialize($value)); // it is important to unserialize data to avoid conflicts.
                     }
                 }
-
-
-
-
             }
-
-
-
-
-
-
         }
 
 
@@ -10864,8 +13301,8 @@ error_log("post_id: $post_id");
                 }
 
 
-                if (!empty($body_arr['bundlePrices'])) {
-                    update_post_meta($post_id, 'bundlePrices', $body_arr['bundlePrices']);
+                if (!empty($body_arr['bulkPrices'])) {
+                    update_post_meta($post_id, 'bulkPrices', $body_arr['bulkPrices']);
                 }
                 if (!empty($body_arr['pwywMinPrice'])) {
                     update_post_meta($post_id, 'pwywMinPrice', $body_arr['pwywMinPrice']);
@@ -11040,7 +13477,7 @@ error_log("post_id: $post_id");
 
         global $wpdb;
         $table = $wpdb->prefix . "cstore_source_links";
-        $datetime = current_time('mysql');
+        $datetime = get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
 
         // Prepare batch insert
         $values = [];

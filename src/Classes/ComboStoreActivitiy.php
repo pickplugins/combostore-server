@@ -25,10 +25,9 @@ class ComboStoreActivitiy
     {
 
 
-
         $userid         = isset($params['userid']) ? intval($params['userid']) : "";
         $event  = isset($params['event']) ? sanitize_text_field($params['event']) : '';
-        $value  = isset($params['value']) ? ($params['value']) : '';
+        $value  = isset($params['value']) ? ($params['value']) : null;
         $source  = isset($params['source']) ? sanitize_text_field($params['source']) : '';
         $device  = isset($params['device']) ? sanitize_text_field($params['device']) : '';
         // $browser  = isset($params['browser']) ? sanitize_text_field($params['browser']) : '';
@@ -65,8 +64,8 @@ class ComboStoreActivitiy
         $data = array(
             'userid'         => $userid,
             'event'    => $event,
-            'value' => wp_json_encode($value),
             'source' => $source,
+            'value' => wp_json_encode($value),
             'device' => $userAgent,
             'browser' => $browser,
             'platform' => $platform,
@@ -76,11 +75,13 @@ class ComboStoreActivitiy
 
         );
 
+
+
         $format = array(
             '%d',   // userid
             '%s',   // event
-            '%s',   // event
-            '%s',   // event
+            '%s',   // source
+            '%s',   // value
             '%s',   // device
             '%s',   // browser
             '%s',   // platform
@@ -93,6 +94,7 @@ class ComboStoreActivitiy
         $wpdb->insert($table, $data, $format);
         $id = $wpdb->insert_id; // Get inserted order_id
 
+error_log($id);
 
         // $ComboStoreObjectMeta = new ComboStoreObjectMeta();
 

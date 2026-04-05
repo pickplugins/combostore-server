@@ -16,6 +16,7 @@ if (!defined('ABSPATH')) exit;  // if direct access
 
 define('combo_store_plugin_url', plugins_url('/', __FILE__));
 define('combo_store_plugin_dir', plugin_dir_path(__FILE__));
+define('combo_store_plugin_file', __FILE__);
 define('combo_store_plugin_name', 'Combo Store');
 define('combo_store_plugin_version', '1.0.0');
 // define('JWT_AUTH_SECRET_KEY', '');
@@ -32,6 +33,7 @@ use ComboStore\Classes\ComboRequestLemonsqueezy;
 use ComboStore\Classes\ComboStoreCrons;
 use ComboStore\Classes\ComboStoreDatabase;
 use ComboStore\Classes\ComboStorePostTypes;
+use ComboStore\Classes\GithubPluginUpdater;
 
 // Check if the class exists before using it
 if (class_exists('ComboStore\Classes\ComboStoreCore')) {
@@ -61,12 +63,30 @@ register_deactivation_hook(__FILE__, 'combo_store_deactivation');
 
 
 require_once(combo_store_plugin_dir . 'includes/functions.php');
+require_once(combo_store_plugin_dir . 'includes/functions-courier.php');
 require_once(combo_store_plugin_dir . 'includes/functions-mails.php');
 require_once(combo_store_plugin_dir . 'includes/functions-shortcodes.php');
 require_once(combo_store_plugin_dir . 'includes/functions-purchase.php');
 require_once(combo_store_plugin_dir . 'includes/functions-roles.php');
 require_once(combo_store_plugin_dir . 'includes/functions-comments.php');
 require_once(combo_store_plugin_dir . 'includes/functions-email-subscribe.php');
+
+
+
+add_action('init', function () {
+
+    new GithubPluginUpdater(
+        combo_store_plugin_file,
+        'pickplugins/combo-store-server', // CHANGE THIS
+        combo_store_plugin_version,
+        '' // optional GitHub token
+    );
+});
+
+
+
+
+
 
 function combo_store_activation()
 {
@@ -91,6 +111,10 @@ function combo_store_activation()
     }
     if (!wp_next_scheduled('run_update_blog_slug')) {
         wp_schedule_event(time(), '15minute', 'run_update_blog_slug');
+    }
+
+    if (!wp_next_scheduled('run_total_counts')) {
+        wp_schedule_event(time(), 'daily', 'run_total_counts');
     }
 
 

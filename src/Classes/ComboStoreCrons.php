@@ -20,6 +20,7 @@ class ComboStoreCrons
     public function __construct()
     {
 
+        add_action('run_total_counts', [$this, 'run_total_counts']);
 
         // add_action('run_update_product_description', [$this, 'run_update_product_description_gemini']);
         // add_action('run_update_blog_description', [$this, 'run_update_blog_description_gemini']);
@@ -28,7 +29,28 @@ class ComboStoreCrons
 
 
 
+    function run_total_counts()
+    {
 
+        $ComboStoreStats = new ComboStoreStats();
+        $total_products = $ComboStoreStats->total_products($user_id);
+        $total_customers = $ComboStoreStats->total_customers($user_id);
+        $total_orders = $ComboStoreStats->total_orders($user_id);
+        $total_subscriptions = $ComboStoreStats->total_subscriptions($user_id);
+        $total_orders_amount = $ComboStoreStats->get_orders_total_amount();
+
+
+        $counts['total_products'] = $total_products;
+        $counts['total_customers'] = $total_customers;
+        $counts['total_orders'] = $total_orders;
+        $counts['total_subscriptions'] = $total_subscriptions;
+        $counts['total_orders_amount'] = $total_orders_amount;
+
+
+        update_option('cstore_total_counts', $counts);
+
+
+    }
 
 
     function run_update_blog_slug()

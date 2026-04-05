@@ -22,10 +22,14 @@ class ComboStoreDeliveries
         $customer_id         = isset($params['customer_id']) ? intval($params['customer_id']) : 0;
         $order_id         = isset($params['order_id']) ? intval($params['order_id']) : 0;
         $rider_id         = isset($params['rider_id']) ? intval($params['rider_id']) : 0;
+        $courier          = isset($params['courier']) ? sanitize_text_field($params['courier']) : '';
+        $consignment_id          = isset($params['consignment_id']) ? sanitize_text_field($params['consignment_id']) : '';
+        $tracking_code          = isset($params['tracking_code']) ? sanitize_text_field($params['tracking_code']) : '';
+        $courier_data          = isset($params['courier_data']) ? sanitize_text_field($params['courier_data']) : null;
         $status          = isset($params['status']) ? sanitize_text_field($params['status']) : 'pending';
-        $notes        = isset($params['notes']) ? sanitize_text_field($params['notes']) : '';
-        $startLatLng        = isset($params['startLatLng']) ? stripslashes_deep($params['startLatLng']) : '';
-        $endLatLng        = isset($params['endLatLng']) ? stripslashes_deep($params['endLatLng']) : '';
+'';
+        $startLatLng        = isset($params['startLatLng']) ? stripslashes_deep($params['startLatLng']) : null;
+        $endLatLng        = isset($params['endLatLng']) ? stripslashes_deep($params['endLatLng']) : null;
 
         // $cartItems = isset($params['cartItems']) ? stripslashes_deep($params['cartItems']) : [];
 
@@ -62,21 +66,27 @@ class ComboStoreDeliveries
             'customer_id'         => $customer_id,
             'order_id'         => $order_id,
             'rider_id'        => $rider_id,
+            'courier'        => $courier,
+            'consignment_id'        => $consignment_id,
+            'tracking_code'        => $tracking_code,
+            'courier_data'        => wp_json_encode($courier_data),
             'status'          => $status,
             'startLatLng'    => wp_json_encode($startLatLng),
             'endLatLng'    => wp_json_encode($endLatLng),
-            'notes'    => $notes,
             'datetime'      => current_time('mysql'),
         );
 
         $format = array(
-            '%d',   // order_id
+            '%d',   // customer_id
             '%d',   // order_id
             '%d',   // rider_id
+            '%s',   // courier
+            '%s',   // consignment_id
+            '%s',   // tracking_code
+            '%s',   // courier_data
             '%s',   // status
             '%s',   // startLatLng
             '%s',   // endLatLng
-            '%s',   // $notes
             '%s',   // current_time
 
         );
@@ -118,7 +128,7 @@ class ComboStoreDeliveries
 
 
 
-    function get_delivery($order_id, $delivery_id)
+    function get_delivery($order_id, $delivery_id = null)
     {
 
         $response = [];
@@ -147,15 +157,18 @@ class ComboStoreDeliveries
         }
 
         $row = [
-            "id" => isset($rowData['id']) ? $rowData['id'] : 0,
-            "customer_id" => isset($rowData['customer_id']) ? $rowData['customer_id'] : 0,
-            "order_id" => isset($rowData['order_id']) ? $rowData['order_id'] : 0,
-            "rider_id" => isset($rowData['rider_id']) ? $rowData['rider_id'] : 0,
-            "type" => isset($rowData['type']) ? $rowData['type'] : '',
-            "status" => isset($rowData['status']) ? $rowData['status'] : '',
+            "id" => isset($rowData['id']) ? $rowData['id'] : null,
+            "customer_id" => isset($rowData['customer_id']) ? $rowData['customer_id'] : null,
+            "order_id" => isset($rowData['order_id']) ? $rowData['order_id'] : null,
+            "rider_id" => isset($rowData['rider_id']) ? $rowData['rider_id'] : null,
+            "courier" => isset($rowData['courier']) ? $rowData['courier'] : null,
+            "consignment_id" => isset($rowData['consignment_id']) ? $rowData['consignment_id'] : null,
+            "tracking_code" => isset($rowData['tracking_code']) ? $rowData['tracking_code'] : null,
+            "courier_data" => isset($rowData['courier_data']) ? $rowData['courier_data'] : null,
+            "type" => isset($rowData['type']) ? $rowData['type'] : null,
+            "status" => isset($rowData['status']) ? $rowData['status'] : null,
             "startLatLng" => isset($rowData['startLatLng']) ? json_decode($rowData['startLatLng'], true) : [],
             "endLatLng" => isset($rowData['endLatLng']) ? json_decode($rowData['endLatLng'], true) : [],
-            "notes" => isset($rowData['notes']) ? $rowData['notes'] : '',
             "datetime" => isset($rowData['datetime']) ? $rowData['datetime'] : ''
         ];
 
@@ -176,11 +189,14 @@ class ComboStoreDeliveries
 
 
         // ✅ Extract variables safely (example fields you may want to update)
-        $delivery_id      = isset($params['id']) ? intval($params['id']) : 0;
+        $delivery_id      = isset($params['id']) ? intval($params['id']) : 0;        $order_id      = isset($params['order_id']) ? intval($params['order_id']) : 0;
+
+        $courier               = isset($params['courier']) ? sanitize_text_field($params['courier']) : '';
+        $consignment_id               = isset($params['consignment_id']) ? sanitize_text_field($params['consignment_id']) : '';
         $status               = isset($params['status']) ? sanitize_text_field($params['status']) : '';
         $type               = isset($params['type']) ? sanitize_text_field($params['type']) : '';
         $rider_id               = isset($params['rider_id']) ? sanitize_text_field($params['rider_id']) : '';
-        $notes    = !empty($params['notes']) ? sanitize_text_field($params['notes']) : null;
+null;
         $startLatLng    = !empty($params['startLatLng']) ? (wp_unslash($params['startLatLng'])) : null;
         $endLatLng    = !empty($params['endLatLng']) ? (wp_unslash($params['endLatLng'])) : null;
 
@@ -192,8 +208,9 @@ class ComboStoreDeliveries
         $data = array(
             'type'              => $type,
             'status'              => $status,
+            'courier'              => $courier,
+            'consignment_id'              => $consignment_id,
             'rider_id'              => $rider_id,
-            'notes'   => $notes,
             'startLatLng'   => wp_json_encode($startLatLng),
             'endLatLng'   => wp_json_encode($endLatLng),
 
@@ -203,8 +220,9 @@ class ComboStoreDeliveries
         $format = array(
             '%s',  // type
             '%s',  // status
+            '%s',  // courier
+            '%s',  // consignment_id
             '%d',  // rider_id
-            '%s',  // notes
             '%s',  // startLatLng
             '%s',  // endLatLng
 

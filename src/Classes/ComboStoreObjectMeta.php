@@ -218,6 +218,12 @@ class ComboStoreObjectMeta
         if ($object == 'subscriptions') {
             $table = $prefix . 'cstore_subscriptions';
         }
+        if ($object == 'purchases') {
+            $table = $prefix . 'cstore_purchases';
+        }
+        if ($object == 'expenses') {
+            $table = $prefix . 'cstore_expenses';
+        }
 
 
         return $table;
@@ -237,7 +243,12 @@ class ComboStoreObjectMeta
         if ($object == 'subscriptions') {
             $table = $prefix . 'cstore_subscriptions_meta';
         }
-
+        if ($object == 'purchases') {
+            $table = $prefix . 'cstore_purchases_meta';
+        }
+        if ($object == 'expenses') {
+            $table = $prefix . 'cstore_expenses_meta';
+        }
 
         return $table;
     }

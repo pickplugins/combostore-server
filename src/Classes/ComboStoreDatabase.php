@@ -27,15 +27,18 @@ class ComboStoreDatabase
         $table_credits = $prefix . 'cstore_credits';
         $table_activities = $prefix . 'cstore_activities';
 
+        $table_product_data = $prefix . 'cstore_product_data';
         $table_orders = $prefix . 'cstore_orders';
         $table_order_items = $prefix . 'cstore_order_items';
         $table_orders_meta = $prefix . 'cstore_orders_meta';
 
         $table_expenses  = $prefix . 'cstore_expenses';
+        $table_expenses_items  = $prefix . 'cstore_expenses_items';
         $table_expenses_meta = $prefix . 'cstore_expenses_meta';
 
         $table_purchases  = $prefix . 'cstore_purchases';
         $table_purchases_meta = $prefix . 'cstore_purchases_meta';
+        $table_purchases_items  = $prefix . 'cstore_purchases_items';
 
 
 
@@ -80,8 +83,8 @@ class ComboStoreDatabase
         			userid	bigint(20)		NOT NULL,
         			event	VARCHAR( 50 )	NOT NULL, 
         			source	VARCHAR( 50 )	NOT NULL, 
-        			value	VARCHAR( 50 )	NOT NULL, 
-        			device	VARCHAR( 50 )	NOT NULL, 
+        			value	VARCHAR( 50 )	DEFAULT NULL, 
+        			device	longtext	NOT NULL, 
         			browser	VARCHAR( 50 )	NOT NULL, 
         			platform	VARCHAR( 50 )	NOT NULL, 
         			ip	VARCHAR( 50 )	NOT NULL, 
@@ -96,11 +99,14 @@ class ComboStoreDatabase
                     customer_id BIGINT(20) NOT NULL,
                     order_id BIGINT(20) NOT NULL,
                     rider_id BIGINT(20) NOT NULL,
+                    courier VARCHAR(50) NOT NULL,
+                    consignment_id VARCHAR(100) NOT NULL,
+                    tracking_code VARCHAR(100) NOT NULL,
+                    courier_data JSON NOT NULL,
                     type VARCHAR(50) NOT NULL,
                     status VARCHAR(50) NOT NULL,
                     startLatLng JSON NOT NULL,
                     endLatLng JSON NOT NULL,
-                    notes LONGTEXT NOT NULL,
                     datetime DATETIME NOT NULL,
                     PRIMARY KEY (id)
                 ) $charset_collate;";
@@ -188,37 +194,67 @@ class ComboStoreDatabase
                 ) $charset_collate;";
 
 
+        $sql_product_data = "CREATE TABLE IF NOT EXISTS $table_product_data (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    product_id BIGINT(20) UNSIGNED DEFAULT NULL, 
+    gallery JSON DEFAULT NULL,
+    menuOrder VARCHAR(100) DEFAULT NULL,
+    sku VARCHAR(100) DEFAULT NULL,
+    stockStatus VARCHAR(50) NOT NULL,
+    stockCount BIGINT(20) DEFAULT NULL, 
+    weight DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    height DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    width DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    length DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    priceType VARCHAR(50) NOT NULL,
+    regularPrice VARCHAR(50) NOT NULL,
+    salePrice VARCHAR(50) NOT NULL,
+    bulkPrices JSON DEFAULT NULL,
+    variablePrices JSON DEFAULT NULL,
+    pwywMinPrice VARCHAR(100) DEFAULT NULL,
+    pwywDefaultPrice VARCHAR(100) DEFAULT NULL,
+    bargainMinPrice VARCHAR(100) DEFAULT NULL,
+    bargainDefaultPrice VARCHAR(100) DEFAULT NULL,
+    tradePrice VARCHAR(100) DEFAULT NULL,
+    addons JSON DEFAULT NULL,
+    downloads JSON DEFAULT NULL,
+    upsells JSON DEFAULT NULL,
+    crosssells JSON DEFAULT NULL,
+    faq JSON DEFAULT NULL,
+    variations JSON DEFAULT NULL,
+    relatedProducts JSON DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY id (id)
+) $charset_collate;";
+
         $sql_orders = "CREATE TABLE IF NOT EXISTS $table_orders (
     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
     userid BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
-
     status VARCHAR(50) NOT NULL,
-
     currency CHAR(3) NOT NULL,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     subtotal_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     shipping_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-
+    advance_payment DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    gross_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    net_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     payment_method VARCHAR(50) NOT NULL,
     payment_status VARCHAR(100) DEFAULT NULL,
     transaction_id VARCHAR(100) DEFAULT NULL,
     shipping_method VARCHAR(100) DEFAULT NULL,
-
     billing_name VARCHAR(150) NOT NULL,
     billing_email VARCHAR(150) NOT NULL,
     billing_phone VARCHAR(50) DEFAULT NULL,
     billing_address TEXT NOT NULL,
-
     shipping_name VARCHAR(150) NOT NULL,
     shipping_phone VARCHAR(50) DEFAULT NULL,
     shipping_address TEXT NOT NULL,
-
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     completed_at DATETIME DEFAULT NULL,
-
     UNIQUE KEY id (id)
 ) $charset_collate;";
 
@@ -228,9 +264,9 @@ class ComboStoreDatabase
     product_id BIGINT(20) UNSIGNED DEFAULT NULL, 
     product_name VARCHAR(200) NOT NULL, 
     sku VARCHAR(100) DEFAULT NULL,
-
     quantity INT NOT NULL DEFAULT 1,
     price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    trade_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -262,27 +298,40 @@ class ComboStoreDatabase
 
 
         $sql_expenses = "CREATE TABLE IF NOT EXISTS $table_expenses (
-    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            category VARCHAR(50) NOT NULL,
+            payment_method VARCHAR(50) NOT NULL,
+            payment_status VARCHAR(100) DEFAULT NULL,
+            transaction_id VARCHAR(100) DEFAULT NULL,
+            created_by BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
+            created_for BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
+            billing_name VARCHAR(150) NOT NULL,
+            billing_email VARCHAR(150) NOT NULL,
+            billing_phone VARCHAR(50) DEFAULT NULL,
+            billing_address TEXT NOT NULL,
+            note TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY id (id)
+        ) $charset_collate;";
 
+        $sql_expenses_items = "CREATE TABLE IF NOT EXISTS $table_expenses_items (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            expense_id BIGINT(20) UNSIGNED NOT NULL, 
+            product_id BIGINT(20) UNSIGNED DEFAULT NULL, 
+            product_name VARCHAR(200) NOT NULL, 
+            sku VARCHAR(100) DEFAULT NULL,
+            quantity INT NOT NULL DEFAULT 1,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            meta JSON DEFAULT NULL,
+            UNIQUE KEY id (id)
 
-    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    category VARCHAR(50) NOT NULL,
-    subcategory VARCHAR(50) NOT NULL,
-
-    payment_method VARCHAR(50) NOT NULL,
-    payment_status VARCHAR(100) DEFAULT NULL,
-    transaction_id VARCHAR(100) DEFAULT NULL,
-
-    craeted_by BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
-    craeted_for BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
-    note TEXT NOT NULL,
-
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE KEY id (id)
-) $charset_collate;";
-
-
+        ) $charset_collate;";
 
 
         $sql_expenses_meta = "CREATE TABLE IF NOT EXISTS $table_expenses_meta (
@@ -296,39 +345,58 @@ class ComboStoreDatabase
 
 
 
+
         $sql_purchases = "CREATE TABLE IF NOT EXISTS $table_purchases (
-    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-
-
-    total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    category VARCHAR(50) NOT NULL,
-    subcategory VARCHAR(50) NOT NULL,
-
-    payment_method VARCHAR(50) NOT NULL,
-    payment_status VARCHAR(100) DEFAULT NULL,
-    transaction_id VARCHAR(100) DEFAULT NULL,
-
-    craeted_by BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
-    craeted_for BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
-    note TEXT NOT NULL,
-
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE KEY id (id)
-) $charset_collate;";
-
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            status VARCHAR(50) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            subtotal_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            shipping_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            advance_payment DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            payment_method VARCHAR(50) NOT NULL,
+            payment_status VARCHAR(100) DEFAULT NULL,
+            transaction_id VARCHAR(100) DEFAULT NULL,
+            user_id BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
+            supplier_id BIGINT(20) UNSIGNED DEFAULT NULL, -- FK to wp_users.ID (or NULL for guests)
+            billing_name VARCHAR(150) NOT NULL,
+            billing_email VARCHAR(150) NOT NULL,
+            billing_phone VARCHAR(50) DEFAULT NULL,
+            billing_address TEXT NOT NULL,
+            note TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY id (id)
+        ) $charset_collate;";
 
 
 
         $sql_purchases_meta = "CREATE TABLE IF NOT EXISTS $table_purchases_meta (
-                    id int(100) NOT NULL AUTO_INCREMENT,
-        			object_id	bigint(20)		NOT NULL,
-        			meta_key	VARCHAR( 255 )		NOT NULL,
-        			meta_value	longtext	NOT NULL,
-                    UNIQUE KEY id (id)
-                ) $charset_collate;";
+            id int(100) NOT NULL AUTO_INCREMENT,
+            object_id	bigint(20)		NOT NULL,
+            meta_key	VARCHAR( 255 )		NOT NULL,
+            meta_value	longtext	NOT NULL,
+            UNIQUE KEY id (id)
+        ) $charset_collate;";
 
 
+        $sql_purchases_items = "CREATE TABLE IF NOT EXISTS $table_purchases_items (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            purchase_id BIGINT(20) UNSIGNED NOT NULL, 
+            product_id BIGINT(20) UNSIGNED DEFAULT NULL, 
+            product_name VARCHAR(200) NOT NULL, 
+            sku VARCHAR(100) DEFAULT NULL,
+            quantity INT NOT NULL DEFAULT 1,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            meta JSON DEFAULT NULL,
+            UNIQUE KEY id (id)
+
+        ) $charset_collate;";
 
 
 
@@ -430,15 +498,19 @@ class ComboStoreDatabase
         dbDelta($sql_deliveries);
         dbDelta($sql_deliveries_trackings);
 
+        dbDelta($sql_product_data);
+
         dbDelta($sql_orders);
         dbDelta($sql_order_items);
         dbDelta($sql_orders_meta);
 
         dbDelta($sql_expenses);
+        dbDelta($sql_expenses_items);
         dbDelta($sql_expenses_meta);
 
         dbDelta($sql_purchases);
         dbDelta($sql_purchases_meta);
+        dbDelta($sql_purchases_items);
 
 
 

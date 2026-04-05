@@ -46,6 +46,95 @@ class ComboStoreProduct
         }
     }
 
+    function update_product_data($prams)
+    {
+
+         $product_id   = isset($params['product_id']) ? floatval($params['product_id']) : 0;
+
+
+
+
+
+
+        $data = array(
+            'product_id'        => $product_id,
+            'gallery'  => $gallery,
+            'menuOrder'    => $menuOrder,
+            'sku'    => $sku,
+            'stockStatus'  => $stockStatus,
+            'stockCount'  => $stockCount,
+            'weight'  => $weight,
+            'height'  => $height,
+            'width'  => $width,
+            'length'  => $length,
+            'priceType'  => $priceType,
+            'regularPrice'  => $regularPrice,
+            'salePrice'  => $salePrice,
+            'bulkPrices'  => $bulkPrices,
+            'variablePrices'  => $variablePrices,
+            'pwywMinPrice'      => $pwywMinPrice,
+            'pwywDefaultPrice'     => $pwywDefaultPrice,
+            'bargainMinPrice'            => $bargainMinPrice,
+            'bargainDefaultPrice'            => $bargainDefaultPrice,
+            'tradePrice'            => $tradePrice,
+            'addons'            => $addons,
+            'downloads'            => $downloads,
+            'upsells'            => $upsells,
+            'crosssells'            => $crosssells,
+            'faq'            => $faq,
+            'variations'            => $variations,
+            'relatedProducts'            => $relatedProducts,
+            'created_at'      => $created_at,
+            'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
+        );
+
+        $format = array(
+            '%d',   // product_id
+            '%s',   // gallery
+            '%d',   // menuOrder
+            '%s',   // sku
+            '%s',   // stockStatus
+            '%d',   // stockCount
+            '%f',   // weight
+            '%f',   // height
+            '%s',   // width
+            '%s',   // length
+            '%s',   // priceType
+            '%f',   // regularPrice
+            '%f',   // salePrice
+            '%s',   // bulkPrices
+            '%s',   // variablePrices
+            '%f',   // pwywMinPrice
+            '%f',   // pwywDefaultPrice
+            '%f',   // bargainMinPrice
+            '%f',   // bargainDefaultPrice
+            '%f',   // tradePrice
+            '%s',   // addons
+            '%s',   // downloads
+            '%s',   // upsells
+            '%s',   // crosssells
+            '%s',   // faq
+            '%s',   // variations
+            '%s',   // relatedProducts
+            '%s',    // created_at
+            '%s'    // updated_at
+        );
+
+        // ✅ WHERE clause
+        $where = array('id' => $purchase_id);
+        $where_format = array('%d');
+
+        // ✅ Perform update
+        $updated = $wpdb->update($table, $data, $where, $format, $where_format);
+
+
+
+
+
+
+
+    }
+
 
 
 

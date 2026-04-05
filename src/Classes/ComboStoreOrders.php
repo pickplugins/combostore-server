@@ -6,6 +6,7 @@ use Error;
 use ComboStore\Classes\ComboStoreObjectMeta;
 use ComboStore\Classes\ComboStoreSubscriptions;
 use ComboStore\Classes\ComboStoreRegister;
+use ComboStore\Classes\ComboStoreDeliveries;
 use DateTime;
 
 if (!defined('ABSPATH')) exit;  // if direct access
@@ -21,7 +22,6 @@ class ComboStoreOrders
     function create_order($params)
     {
 
-error_log(wp_json_encode($params));
 
         $user_id         = isset($params['user_id']) ? intval($params['user_id']) : 0;
 
@@ -34,6 +34,10 @@ error_log(wp_json_encode($params));
         $discount_amount = isset($params['discount_amount']) ? floatval($params['discount_amount']) : 0.00;
         $tax_amount      = isset($params['tax_amount']) ? floatval($params['tax_amount']) : 0.00;
         $shipping_amount = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : 0.00;
+        $advance_payment = isset($params['advance_payment']) ? floatval($params['advance_payment']) : 0.00;
+        $advance_payment_note = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) : '';
+        $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : 0.00;
+        $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : 0.00;
 
         $payment_method  = isset($params['payment_method']) ? sanitize_text_field($params['payment_method']) : '';
         $payment_status  = isset($params['payment_status']) ? sanitize_text_field($params['payment_status']) : 'unpaid';
@@ -125,6 +129,9 @@ error_log(wp_json_encode($params));
             'discount_amount' => $discount_amount,
             'tax_amount'      => $tax_amount,
             'shipping_amount' => $shipping_amount,
+            'advance_payment' => $advance_payment,
+            'gross_profit' => $gross_profit,
+            'net_profit' => $net_profit,
             'payment_method'  => $payment_method,
             'payment_status'  => $payment_status,
             'transaction_id'  => $transaction_id,
@@ -136,8 +143,8 @@ error_log(wp_json_encode($params));
             'shipping_name'   => $shipping_name,
             'shipping_phone'  => $shipping_phone,
             'shipping_address' => $shipping_address,
-            'created_at'      => current_time('mysql'),
-            'updated_at'      => current_time('mysql')
+            'created_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
+            'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
         );
 
         $format = array(
@@ -149,6 +156,9 @@ error_log(wp_json_encode($params));
             '%f',   // discount_amount
             '%f',   // tax_amount
             '%f',   // shipping_amount
+            '%f',   // advance_payment
+            '%f',   // gross_profit
+            '%f',   // net_profit
             '%s',   // payment_method
             '%s',   // payment_status
             '%s',   // transaction_id
@@ -195,6 +205,7 @@ error_log(wp_json_encode($params));
 
 
         $ComboStoreObjectMeta->update_meta('orders', $order_id, "order_id_hash", $order_id_hash);
+        $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
 
 
         if ($subscription_enable) {
@@ -299,8 +310,8 @@ error_log(wp_json_encode($params));
         $response = [];
 
         global $wpdb;
-        $table = $wpdb->prefix . "cstore_order";
-
+        $table = $wpdb->prefix . "cstore_orders";
+        $ComboStoreDeliveries = new ComboStoreDeliveries();
 
         $orderRow = $wpdb->get_row(
             $wpdb->prepare(
@@ -311,12 +322,169 @@ error_log(wp_json_encode($params));
         );
 
         $order_items = $this->get_order_items($order_id);
+        $delivery_data = $ComboStoreDeliveries->get_delivery($order_id);
 
-        $orderRow->order_items = $order_items;
-        $orderRow->shipping_amount = 0;
+        $orderRow['order_items'] = $order_items;
+        $orderRow['delivery'] = $delivery_data;
 
+        $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+
+        $orderRow['delivery_location'] = $ComboStoreObjectMeta->get_meta('orders', $order_id, "delivery_location");
+        $orderRow['advance_payment_note'] = $ComboStoreObjectMeta->get_meta('orders', $order_id, "advance_payment_note");
+        $orderRow['coupons'] = $ComboStoreObjectMeta->get_meta('orders', $order_id, "coupons");
+        
 
         return $orderRow;
+    }
+    function get_orders($prams)
+    {
+
+
+        $responses = [];
+
+        $isAdmin     = isset($prams['isAdmin']) ? ($prams['isAdmin']) : false;
+        $user_id     = isset($prams['user_id']) ? ($prams['user_id']) : '';
+        $object     = isset($prams['object']) ? sanitize_email($prams['object']) : '';
+        $page     = isset($prams['paged']) ? absint($prams['paged']) : 1;
+        $per_page     = isset($prams['per_page']) ? absint($prams['per_page']) : 10;
+        $order     = isset($prams['order']) ? sanitize_text_field($prams['order']) : "DESC";
+        $status     = isset($prams['status']) ? sanitize_text_field($prams['status']) : "";
+        $payment_method     = isset($prams['payment_method']) ? sanitize_text_field($prams['payment_method']) : "";
+        $payment_status     = isset($prams['payment_status']) ? sanitize_text_field($prams['payment_status']) : "";
+        $product_id     = isset($prams['product_id']) ? sanitize_text_field($prams['product_id']) : "";
+        $customer     = isset($prams['customer']) ? ($prams['customer']) : [];
+
+        $customer_id = isset($customer['id']) ? $customer['id'] : "";
+
+
+        $from_date = isset($prams['from_date']) ? sanitize_text_field($prams['from_date']) : '';
+        $to_date   = isset($prams['to_date']) ? sanitize_text_field($prams['to_date']) : '';
+
+
+
+
+
+
+        $page = ($page == 0) ? 1 : $page;
+
+
+        global $wpdb;
+
+        $prefix = $wpdb->prefix;
+
+        $table_orders = $prefix . 'cstore_orders';
+        $table_order_items = $prefix . 'cstore_order_items';
+        $offset = ($page - 1) * $per_page;
+
+        $last_day = gmdate("Y-m-d");
+        $first_date = gmdate("Y-m-d", strtotime("7 days ago"));
+
+        //$entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE datetime BETWEEN '$first_date' AND '$last_day' ORDER BY id $order limit $offset, $per_page");
+
+        if ($isAdmin) {
+            $where   = [];
+            $params  = [];
+
+            if (!empty($status)) {
+                $where[]  = "status = %s";
+                $params[] = $status;
+            }
+
+            if (!empty($payment_method)) {
+                $where[]  = "payment_method = %s";
+                $params[] = $payment_method;
+            }
+
+            if (!empty($payment_status)) {
+                $where[]  = "payment_status = %s";
+                $params[] = $payment_status;
+            }
+
+            if (!empty($customer_id)) {
+                $where[]  = "userid = %s";
+                $params[] = $customer_id;
+            }
+
+            if ($from_date && $to_date) {
+                $where[]  = "created_at BETWEEN %s AND %s";
+                $params[] = $from_date . " 00:00:00";
+                $params[] = $to_date . " 23:59:59";
+            }
+
+
+            if (!empty($product_id)) {
+                $where[] = "EXISTS (
+                    SELECT 1 FROM {$table_order_items} oi
+                    WHERE oi.order_id = {$table_orders}.id
+                    AND oi.product_id = %d
+                )";
+
+                $params[] = $product_id;
+            }
+
+            $where_sql = '';
+
+            if (!empty($where)) {
+                $where_sql = "WHERE " . implode(' AND ', $where);
+            }
+
+            $allowed_order = ['ASC', 'DESC'];
+            $order = strtoupper($order);
+
+            if (!in_array($order, $allowed_order)) {
+                $order = 'DESC';
+            }
+
+            $sql = "SELECT * FROM $table_orders
+                    $where_sql
+                    ORDER BY id $order
+                    LIMIT %d, %d";
+
+            $params[] = (int) $offset;
+            $params[] = (int) $per_page;
+
+            $query = $wpdb->prepare($sql, $params);
+
+            $entries = $wpdb->get_results($query);
+
+
+            $total = count($entries);
+                                                                                            
+
+        } else {
+            $entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
+            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_orders WHERE userid='$user_id'");
+        }
+
+
+
+
+        $big = 999999999; // need an unlikely integer
+
+
+
+        foreach ($entries as $key => $entry) {
+            $ComboStoreDeliveries = new ComboStoreDeliveries();
+            $ComboStoreOrders = new ComboStoreOrders();
+            $entries[$key]->delivery = $ComboStoreDeliveries->get_delivery($entry->id);
+            $entries[$key]->order_items = $ComboStoreOrders->get_order_items($entry->id);
+        }
+
+
+
+
+        // Fix the total count query by removing the per_page clause
+
+        // Calculate max pages
+        $max_pages = ceil($total / $per_page);
+
+        $responses['total'] = (int)$total;
+
+        $responses['max_pages'] = (int)$max_pages;
+        $responses['posts'] = $entries;
+
+
+        return $responses;
     }
 
 
@@ -361,8 +529,16 @@ error_log(wp_json_encode($params));
         $discount_amount = isset($params['discount_amount']) ? floatval($params['discount_amount']) : 0.00;
         $tax_amount      = isset($params['tax_amount']) ? floatval($params['tax_amount']) : 0.00;
         $shipping_amount = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : 0.00;
+        $advance_payment = isset($params['advance_payment']) ? floatval($params['advance_payment']) : 0.00;
+        $advance_payment_note = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) :'';
+        $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : 0.00;
+        $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : 0.00;
+        $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) :get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
+        $completed_at = isset($params['completed_at']) ? sanitize_text_field($params['completed_at']) :get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
 
         $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : [];
+        $coupons = isset($params['coupons']) ? stripslashes_deep($params['coupons']) : [];
+
 
 
         // ✅ Data to update
@@ -375,6 +551,9 @@ error_log(wp_json_encode($params));
             'discount_amount' => $discount_amount,
             'tax_amount'      => $tax_amount,
             'shipping_amount' => $shipping_amount,
+            'advance_payment' => $advance_payment,
+            'gross_profit' => $gross_profit,
+            'net_profit' => $net_profit,
             'payment_method'  => $payment_method,
             'payment_status'  => $payment_status,
             'transaction_id'  => $transaction_id,
@@ -386,7 +565,8 @@ error_log(wp_json_encode($params));
             'shipping_name'   => $shipping_name,
             'shipping_phone'  => $shipping_phone,
             'shipping_address' => $shipping_address,
-            'updated_at'      => current_time('mysql')
+            'created_at'      => $created_at,
+            'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
         );
 
         // ✅ Format mapping
@@ -399,6 +579,9 @@ error_log(wp_json_encode($params));
             '%f',   // discount_amount
             '%f',   // tax_amount
             '%f',   // shipping_amount
+            '%f',   // advance_payment
+            '%f',   // gross_profit
+            '%f',   // net_profit
             '%s',   // payment_method
             '%s',   // payment_status
             '%s',   // transaction_id
@@ -410,7 +593,8 @@ error_log(wp_json_encode($params));
             '%s',   // shipping_name
             '%s',   // shipping_phone
             '%s',   // shipping_address
-            '%s'    // updated_at
+            '%s',   // created_at
+            '%s',   // updated_at
         );
 
         // ✅ WHERE clause
@@ -424,9 +608,15 @@ error_log(wp_json_encode($params));
         $action_prams = array_merge($data, ["order_id" => $order_id, "billing_name" => $billing_name, "total_amount" => $total_amount, "payment_method" => $payment_method, 'billing_email' => $billing_email],);
 
 
+ 
 
         if ($updated) {
             $response = true;
+
+            $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+            $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
+            $ComboStoreObjectMeta->update_meta('orders', $order_id, "coupons", $coupons);
+
 
             if($status == 'completed'){
                 foreach($lineItems as $lineItem){
@@ -443,7 +633,6 @@ error_log(wp_json_encode($params));
                         $stockCount = 0;
                     }
 
-                    $ComboStoreObjectMeta = new ComboStoreObjectMeta();
                     $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
 
 
@@ -461,6 +650,35 @@ error_log(wp_json_encode($params));
 
                     
                 }
+
+
+
+
+
+
+
+        // ✅ Data to update
+        $data = array(
+            'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
+        );
+
+        // ✅ Format mapping
+        $format = array(
+            '%s'    // completed_at
+        );
+
+        // ✅ WHERE clause
+        $where = array('id' => $order_id);
+        $where_format = array('%d');
+
+        // ✅ Perform update
+        $updated = $wpdb->update($table, $data, $where, $format, $where_format);
+
+
+
+
+
+
 
             }
 
@@ -480,12 +698,258 @@ error_log(wp_json_encode($params));
         }
         return $response;
     }
+    function bulk_update_orders($params)
+    {
+
+        global $wpdb;
+        $prefix = $wpdb->prefix;
+        $table = $prefix . 'cstore_orders';
+
+
+        // ✅ Extract variables safely (example fields you may want to update)
+        $order_ids      = isset($params['ids']) ? ($params['ids']) : [];
+        $user_id      = isset($params['userid']) ? intval($params['userid']) : null;
+        $status               = isset($params['status']) ? sanitize_text_field($params['status']) : null;
+        $currency               = isset($params['currency']) ? sanitize_text_field($params['currency']) : "";
+        $billing_name               = isset($params['billing_name']) ? sanitize_text_field($params['billing_name']) : null;
+        $billing_email    = isset($params['billing_email']) ? sanitize_email($params['billing_email']) : null;
+
+        $payment_method    = !empty($params['payment_method']) ? sanitize_text_field($params['payment_method']) : null;
+        $payment_status = isset($params['payment_status']) ? sanitize_text_field($params['payment_status']) : null;
+        $transaction_id    = !empty($params['transaction_id']) ? sanitize_text_field($params['transaction_id']) : null;
+        $shipping_method  = isset($params['shipping_method']) ? sanitize_text_field($params['shipping_method']) : null;
+
+        $billing_name  = isset($params['billing_name']) ? sanitize_text_field($params['billing_name']) : null;
+        $billing_address  = isset($params['billing_address']) ? sanitize_text_field($params['billing_address']) : null;
+        $billing_phone  = isset($params['billing_phone']) ? sanitize_text_field($params['billing_phone']) : null;
+        $shipping_name  = isset($params['shipping_name']) ? sanitize_text_field($params['shipping_name']) : null;
+        $shipping_phone  = isset($params['shipping_phone']) ? sanitize_text_field($params['shipping_phone']) : null;
+        $shipping_address  = isset($params['shipping_address']) ? sanitize_text_field($params['shipping_address']) : null;
+
+
+
+        $total_amount    = isset($params['total_amount']) ? floatval($params['total_amount']) : null;
+        $subtotal_amount = isset($params['subtotal_amount']) ? floatval($params['subtotal_amount']) : null;
+        $discount_amount = isset($params['discount_amount']) ? floatval($params['discount_amount']) : null;
+        $tax_amount      = isset($params['tax_amount']) ? floatval($params['tax_amount']) : null;
+        $shipping_amount = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : null;
+        $advance_payment = isset($params['advance_payment']) ? floatval($params['advance_payment']) : null;
+        $advance_payment_note = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) :null;
+        $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : null;
+        $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : null;
+        $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) :null;
+        $completed_at = isset($params['completed_at']) ? sanitize_text_field($params['completed_at']) :null;
+
+        $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : [];
+
+
+
+        // Original data
+        $data = array(
+            'userid'         => $user_id,
+            'status'         => $status,
+            'currency'       => $currency,
+            'total_amount'   => $total_amount,
+            'subtotal_amount'=> $subtotal_amount,
+            'discount_amount'=> $discount_amount,
+            'tax_amount'     => $tax_amount,
+            'shipping_amount'=> $shipping_amount,
+            'advance_payment'=> $advance_payment,
+            'gross_profit'=> $gross_profit,
+            'net_profit'=> $net_profit,
+            'payment_method' => $payment_method,
+            'payment_status' => $payment_status,
+            'transaction_id' => $transaction_id,
+            'shipping_method'=> $shipping_method,
+            'billing_name'   => $billing_name,
+            'billing_email'  => $billing_email,
+            'billing_phone'  => $billing_phone,
+            'billing_address'=> $billing_address,
+            'shipping_name'  => $shipping_name,
+            'shipping_phone' => $shipping_phone,
+            'shipping_address'=> $shipping_address,
+            'created_at'     => $created_at,
+            'updated_at'     => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
+        );
+
+        // Format map
+        $format_map = array(
+            'userid'         => '%d',
+            'status'         => '%s',
+            'currency'       => '%s',
+            'total_amount'   => '%f',
+            'subtotal_amount'=> '%f',
+            'discount_amount'=> '%f',
+            'tax_amount'     => '%f',
+            'shipping_amount'=> '%f',
+            'advance_payment'=> '%f',
+            'gross_profit'=> '%f',
+            'net_profit'=> '%f',
+            'payment_method' => '%s',
+            'payment_status' => '%s',
+            'transaction_id' => '%s',
+            'shipping_method'=> '%s',
+            'billing_name'   => '%s',
+            'billing_email'  => '%s',
+            'billing_phone'  => '%s',
+            'billing_address'=> '%s',
+            'shipping_name'  => '%s',
+            'shipping_phone' => '%s',
+            'shipping_address'=> '%s',
+            'created_at'     => '%s',
+            'updated_at'     => '%s',
+        );
+
+        // Filter only non-empty values
+        $filtered_data   = array();
+        $filtered_format = array();
+
+        foreach ($data as $key => $value) {
+
+            // Skip NULL or empty string
+            if ($value !== 0 && $value !== null && $value !== '') {
+
+                $filtered_data[$key]   = $value;
+                $filtered_format[]     = $format_map[$key];
+            }
+        }
+
+
+
+        foreach($order_ids as $order_id){
+
+            $where = array('id' => $order_id);
+            $where_format = array('%d');
+
+            // Run update only if data exists
+            if (!empty($filtered_data)) {
+                $updated = $wpdb->update(
+                    $table,
+                    $filtered_data,
+                    $where,
+                    $filtered_format,
+                    $where_format
+                );
+
+
+
+                if ($updated) {
+                    $response['status'] = 'success';
+
+                    $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+                    if(!empty($advance_payment_note)){
+                        $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
+
+                    }
+
+
+                    if($status == 'completed'){
+
+
+                        foreach($lineItems as $lineItem){
+                            $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
+                            $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
+
+                            $stockStatus = get_post_meta($product_id, 'stockStatus', true);
+
+                            if($stockStatus == 'instock'){
+                            $stockCount = intval(get_post_meta($product_id, 'stockCount', true));
+
+                            $stockCount = $stockCount-$quantity;
+                            if($stockCount < 0){
+                                $stockCount = 0;
+                            }
+
+                            $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
+
+
+                            if(!$stock_updated ){
+                                update_post_meta($product_id, 'stockCount', $stockCount);
+                   
+                               $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
+
+                                if($stockCount < 5){
+                                    do_action("combo_store_low_stock", $product_id);
+                                }
+
+                            }
+        
+                            }
+
+                            
+                        }
+
+
+
+
+
+
+                
+                        // ✅ Data to update
+                        $data = array(
+                            'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
+                        );
+
+                        // ✅ Format mapping
+                        $format = array(
+                            '%s'    // completed_at
+                        );
+
+                        // ✅ WHERE clause
+                        $where = array('id' => $order_id);
+                        $where_format = array('%d');
+
+                        // ✅ Perform update
+                        $updated = $wpdb->update($table, $data, $where, $format, $where_format);
+
+
+                    }
+
+
+                    if(!empty($lineItems)){
+                        $prams = [
+                            "order_id" => $order_id,
+                            "cartItems" => $lineItems,
+                        ];
+
+                        $this->update_order_items($prams);
+                    }
+
+
+                    //do_action("combo_store_order_updated", $action_prams);
+
+                } else {
+                    $response['status'] = 'failed';
+                    //do_action("combo_store_order_update_failed", $action_prams);
+                }
+
+
+            }
+
+
+              
+
+
+        
+
+               
+
+        }
+
+        return $response;
+    }
+
+
+
+
+
+
 
     function insert_order_items($prams)
     {
 
 
-$response = [];
+        $response = [];
 
         $cartItems = isset($prams['cartItems']) ? $prams['cartItems'] : '';
         $order_id = isset($prams['order_id']) ? $prams['order_id'] : '';
@@ -500,6 +964,7 @@ $response = [];
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
             $price         = isset($cartItem['price']) ? floatval($cartItem['price']) : 0.00;
+            $trade_price         = isset($cartItem['trade_price']) ? floatval($cartItem['trade_price']) : 0.00;
             $subtotal      = isset($cartItem['subtotal']) ? floatval($cartItem['subtotal']) : 0.00;
             $tax           = isset($cartItem['tax']) ? floatval($cartItem['tax']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
@@ -513,6 +978,7 @@ $response = [];
                 'sku'          => $sku,
                 'quantity'     => $quantity,
                 'price'        => $price,
+                'trade_price'        => $trade_price,
                 'subtotal'     => $subtotal,
                 'tax'          => $tax,
                 'total'        => $total,
@@ -526,6 +992,7 @@ $response = [];
                 '%s', // sku
                 '%d', // quantity
                 '%f', // price
+                '%f', // trade_price
                 '%f', // subtotal
                 '%f', // tax
                 '%f', // total
@@ -540,11 +1007,11 @@ $response = [];
 
 
 
-  if ($wpdb->last_error) {
+        if ($wpdb->last_error) {
             $response['status'] = 'failed';
-        }else{
+        } else {
             $response['status'] = 'success';
-}
+        }
 
             return $response;
 
@@ -577,6 +1044,7 @@ $response = [];
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
             $price         = isset($cartItem['price']) ? floatval($cartItem['price']) : 0.00;
+            $trade_price         = isset($cartItem['trade_price']) ? floatval($cartItem['trade_price']) : 0.00;
             $subtotal      = isset($cartItem['subtotal']) ? floatval($cartItem['subtotal']) : 0.00;
             $tax           = isset($cartItem['tax']) ? floatval($cartItem['tax']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
@@ -590,6 +1058,7 @@ $response = [];
                 'sku'          => $sku,
                 'quantity'     => $quantity,
                 'price'        => $price,
+                'trade_price'        => $trade_price,
                 'subtotal'     => $subtotal,
                 'tax'          => $tax,
                 'total'        => $total,
@@ -603,6 +1072,7 @@ $response = [];
                 '%s', // sku
                 '%d', // quantity
                 '%f', // price
+                '%f', // trade_price
                 '%f', // subtotal
                 '%f', // tax
                 '%f', // total
@@ -618,11 +1088,11 @@ $response = [];
 
 
 
-  if ($wpdb->last_error) {
+        if ($wpdb->last_error) {
             $response['status'] = 'failed';
-        }else{
+        } else {
             $response['status'] = 'success';
-}
+        }
 
             return $response;
 
@@ -667,6 +1137,94 @@ $response = [];
 
         return $response;
     }
+ function duplicate_order($order_id)
+    {
+
+        // $order_id = isset($prams['order_id']) ? $prams['order_id'] : '';
+        // $item_id = isset($prams['item_id']) ? $prams['item_id'] : '';
+
+
+
+
+        global $wpdb;
+
+
+        $response = [];
+
+        if (!$order_id) {
+            $response['errors']["delete_failed"] = "Deleting failed";
+        }
+
+
+
+
+        global $wpdb;
+        $prefix = $wpdb->prefix;
+
+        $table_orders = $prefix . 'cstore_orders';
+        $table_order_items = $prefix . 'cstore_order_items';
+
+
+        // 1️⃣ Get original order
+        $original_order = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM $table_orders WHERE id = %d", $order_id),
+            ARRAY_A
+        );
+
+        if ($original_order) {
+
+            // 2️⃣ Remove primary key (AUTO_INCREMENT)
+            unset($original_order['id']);
+
+            // Optional: reset status or timestamps
+            $original_order['status'] = 'pending';
+            $original_order['created_at'] = get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
+            $original_order['updated_at'] = get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
+            $original_order['completed_at'] = null;
+
+            // 3️⃣ Insert duplicated row
+            $wpdb->insert($table_orders, $original_order);
+
+            // 4️⃣ Get new ID
+            $new_order_id = $wpdb->insert_id;
+
+
+
+
+            $order_items = $wpdb->get_results(
+                $wpdb->prepare("SELECT * FROM $table_order_items WHERE order_id = %d", $order_id),
+                ARRAY_A
+            );
+
+            if (!empty($order_items)) {
+
+                foreach ($order_items as $item) {
+
+                    unset($item['id']); // remove AUTO_INCREMENT
+                    $item['order_id'] = $new_order_id; // attach to new order
+
+                    $wpdb->insert($table_order_items, $item);
+                }
+            }
+
+
+
+            $response['success'] = true;
+            $response['id'] = $new_order_id;
+
+
+        } else {
+            $response['success'] = false;
+
+        }
+
+
+
+
+        $response['status'] = $status;
+
+        return $response;
+    }
 
 
 
@@ -689,6 +1247,21 @@ $response = [];
         );
 
         $order_items = $wpdb->get_results($query);
+
+
+        foreach ($order_items as $key => $entry) {
+     
+            $product_name = isset($entry->product_name) ? $entry->product_name : '';
+            $product_id = isset($entry->product_id) ? $entry->product_id : '';
+            
+            if(empty($product_name)){
+                $product_name = get_the_title($product_id);
+            }
+
+            $order_items[$key]->product_name = $product_name;
+
+        }
+
 
         return $order_items;
     }

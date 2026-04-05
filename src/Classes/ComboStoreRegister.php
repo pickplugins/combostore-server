@@ -21,13 +21,36 @@ class ComboStoreRegister
 
 
 
-        $email = isset($args['email']) ? $args['email'] : '';
         $password = isset($args['password']) ? $args['password'] : '';
         $role = isset($args['role']) ? $args['role'] : '';
         $mobile = isset($args['mobile']) ? $args['mobile'] : '';
+        $email = isset($args['email']) ? $args['email'] : '';
+        $registerBy = isset($args['registerBy']) ? $args['registerBy'] : 'email';
+
+error_log("registerBy: $registerBy");
 
 
-        $this->email = !empty($email) ? $email : $mobile;
+        if($registerBy == 'mobile'){
+
+            if(empty($mobile)){
+                $response['error'] = true;
+                $response['messages'] = ['Mobile number is required'];
+                return wp_json_encode($response);
+            }
+            if(empty($password)){
+                $response['error'] = true;
+                $response['messages'] = ['Password is required'];
+                return wp_json_encode($response);
+            }
+
+
+        $email =  $mobile.'@mo.lo';
+        }
+
+
+
+
+        $this->email = $email;
         $this->password = $password;
         $this->role = $role;
 
@@ -56,7 +79,6 @@ class ComboStoreRegister
 
 
 
-
         // $userdata = array(
         //     'user_login'    => $email,
         //     'user_pass'     => $password,
@@ -75,7 +97,7 @@ class ComboStoreRegister
         if (!is_wp_error($user_id)) {
             $response['error'] = false;
             $response['user_id'] = $user_id;
-            $response['messages']['success'] = "Registration Successful, please login.";
+            $response['messages'] = ["Registration Successful, please login."];
 
             return wp_json_encode($response);
         } else {
