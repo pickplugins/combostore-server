@@ -3,7 +3,7 @@
 Plugin Name: Combo Store - Server
 Plugin URI: http://pickplugins.com/items/woocommerce-product-slider-for-wordpress/
 Description: combo-store
-Version: 1.0.1
+Version: 1.0.2
 Author: PickPlugins
 Text Domain: combo-store-server
 Author URI: http://pickplugins.com
@@ -18,7 +18,7 @@ define('combo_store_plugin_url', plugins_url('/', __FILE__));
 define('combo_store_plugin_dir', plugin_dir_path(__FILE__));
 define('combo_store_plugin_file', __FILE__);
 define('combo_store_plugin_name', 'Combo Store');
-define('combo_store_plugin_version', '1.0.1');
+define('combo_store_plugin_version', '1.0.2');
 // define('JWT_AUTH_SECRET_KEY', '');
 
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
@@ -75,6 +75,7 @@ require_once(combo_store_plugin_dir . 'includes/functions-email-subscribe.php');
 
 add_action('init', function () {
 
+
     new GithubPluginUpdater(
         combo_store_plugin_file,
         'pickplugins/combo-store-server', // CHANGE THIS
@@ -83,7 +84,7 @@ add_action('init', function () {
     );
 });
 
-
+//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
 
 
 

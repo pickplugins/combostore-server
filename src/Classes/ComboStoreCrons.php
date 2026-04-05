@@ -33,10 +33,10 @@ class ComboStoreCrons
     {
 
         $ComboStoreStats = new ComboStoreStats();
-        $total_products = $ComboStoreStats->total_products($user_id);
-        $total_customers = $ComboStoreStats->total_customers($user_id);
-        $total_orders = $ComboStoreStats->total_orders($user_id);
-        $total_subscriptions = $ComboStoreStats->total_subscriptions($user_id);
+        $total_products = $ComboStoreStats->total_products();
+        $total_customers = $ComboStoreStats->total_customers();
+        $total_orders = $ComboStoreStats->total_orders();
+        $total_subscriptions = $ComboStoreStats->total_subscriptions();
         $total_orders_amount = $ComboStoreStats->get_orders_total_amount();
 
 
@@ -48,8 +48,6 @@ class ComboStoreCrons
 
 
         update_option('cstore_total_counts', $counts);
-
-
     }
 
 
@@ -60,7 +58,7 @@ class ComboStoreCrons
         $job_category = "";
         $response = [];
 
-        
+
 
 
 
@@ -105,7 +103,7 @@ class ComboStoreCrons
                 //$post_data = get_post($post_id);
 
 
-                
+
 
                 $post_title = get_the_title();
 
@@ -161,7 +159,7 @@ do not add any other text.
 
                 // Check for error in the response
                 if (is_wp_error($api_response)) {
-                    
+
 
                     $response['failed'] = "API Error $post_id";
 
@@ -176,7 +174,7 @@ do not add any other text.
                     if (strpos($body_data, "502 Bad Gateway") !== false) {
                         $response['failed'] = "API Error $post_id";
 
-                        
+
 
 
                         return wp_json_encode($response);
@@ -185,7 +183,7 @@ do not add any other text.
 
                     if (strpos($body_data, "azure-openai error") !== false) {
                         $response['failed'] = "API Error $post_id";
-                        
+
 
 
                         return wp_json_encode($response);
@@ -419,7 +417,7 @@ Please do not add any other text and reference.
         $job_category = "";
         $response = [];
 
-        
+
 
 
         // $tax_query[] = array(
@@ -549,7 +547,7 @@ Automatically generate SEO keywords naturally based on the product type.
 
                 // Execute request
                 $response = curl_exec($ch);
-                
+
 
                 // Error handling
                 if (curl_errno($ch)) {
@@ -706,7 +704,7 @@ Do not add any other text and any reference.
 
                 // Check for error in the response
                 if (is_wp_error($api_response)) {
-                    
+
 
                     $response['failed'] = "API Error $post_id";
 

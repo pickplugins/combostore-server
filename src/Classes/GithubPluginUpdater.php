@@ -30,7 +30,7 @@ class GithubPluginUpdater
         add_filter('plugins_api', [$this, 'plugin_info'], 10, 3);
         add_filter('upgrader_post_install', [$this, 'after_install'], 10, 3);
 
-        error_log("GitHub Plugin Updater initialized for {$github_repo} with version {$version}");
+        error_log("#1 GitHub Plugin Updater initialized for {$github_repo} with version {$version}");
     }
 
     /**
@@ -39,13 +39,12 @@ class GithubPluginUpdater
     public function check_update($transient)
     {
 
-        // error_log(wp_json_encode($transient));
 
         if (empty($transient->checked)) return $transient;
 
         $remote = $this->get_remote_release();
 
-        error_log(wp_json_encode($remote));
+        error_log("#2 Remote release: " . wp_json_encode($remote));
 
 
         if (!$remote || empty($remote->tag_name)) return $transient;
