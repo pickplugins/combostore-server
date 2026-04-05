@@ -4,7 +4,7 @@
 	Tags: product slider, woocommerce slider, carousel slider, product category slider, woo slider, carousel slider,  woocommerce product slider
 	Requires at least: 3.8
 	Tested up to: 5.4
-	Stable tag: 1.13.12
+	Stable tag: 1.0.1
 	License: GPLv2 or later
 	License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
