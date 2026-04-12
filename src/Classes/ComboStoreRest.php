@@ -4636,10 +4636,10 @@ class ComboStoreRest
 
         $body = $request->get_body();
 
-
+        error_log(wp_json_encode($body));
 
         $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 6;
+        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 100;
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
         $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
@@ -4650,6 +4650,7 @@ class ComboStoreRest
         $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
         $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
 
+        error_log(`per_page: $per_page`);
 
         $query_args = [];
         $meta_query = [];
@@ -5514,24 +5515,27 @@ class ComboStoreRest
         $limit = get_post_meta($post_id, 'limit', true);
         $amount = get_post_meta($post_id, 'amount', true);
 
+        $response = [];
+
+        if (isset($postData->ID)) {
+            $productData = [
+                "id" => $postData->ID,
+                "title" => $postData->post_title,
+                "postStatus" => $postData->post_status,
+                "couponCode" => $couponCode,
+                "amount" => $amount,
+                "couponType" => $couponType,
+                "startDate" => $startDate,
+                "endDate" => $endDate,
+                "limit" => $limit,
+
+            ];
 
 
-        $productData = [
-            "id" => $postData->ID,
-            "title" => $postData->post_title,
-            "postStatus" => $postData->post_status,
-            "couponCode" => $couponCode,
-            "amount" => $amount,
-            "couponType" => $couponType,
-            "startDate" => $startDate,
-            "endDate" => $endDate,
-            "limit" => $limit,
 
-        ];
+            $response['coupon'] = $productData;
+        }
 
-
-
-        $response['coupon'] = $productData;
 
 
         die(wp_json_encode($response));
@@ -11164,6 +11168,7 @@ class ComboStoreRest
         $last_name              = get_user_meta($id,  "last_name", true);
         $email              = isset($rider->user_email) ? $rider->user_email : '';
         $phone              = get_user_meta($id,  "phone", true);
+        $phones              = get_user_meta($id,  "phones", true);
         $address_1              = get_user_meta($id,  "address_1", true);
         $address_2              = get_user_meta($id,  "address_2", true);
         $zip_code              = get_user_meta($id,  "zip_code", true);
@@ -11182,6 +11187,7 @@ class ComboStoreRest
             'first_name'  => $first_name,
             'last_name'  => $last_name,
             'phone'  => $phone,
+            'phones'  => $phones ? $phones : [],
             'address_1'  => $address_1,
             'address_2'  => $address_2,
             'zip_code'  => $zip_code,
@@ -11256,7 +11262,16 @@ class ComboStoreRest
         $name     = isset($userData['name']) ? sanitize_text_field($userData['name']) : '';
         $first_name     = isset($userData['first_name']) ? sanitize_text_field($userData['first_name']) : '';
         $last_name     = isset($userData['last_name']) ? sanitize_text_field($userData['last_name']) : '';
+        $email     = isset($userData['email']) ? sanitize_email($userData['email']) : '';
+        $customer_category     = isset($userData['customer_category']) ? sanitize_text_field($userData['customer_category']) : '';
+        $income     = isset($userData['income']) ? sanitize_text_field($userData['income']) : '';
+        $profession     = isset($userData['profession']) ? sanitize_text_field($userData['profession']) : '';
+        $has_orderd     = isset($userData['has_orderd']) ? sanitize_text_field($userData['has_orderd']) : '';
+
+
         $phone     = isset($userData['phone']) ? sanitize_text_field($userData['phone']) : '';
+        $phones     = isset($userData['phones']) ? stripslashes_deep($userData['phones']) : [];
+        $kids     = isset($userData['kids']) ? stripslashes_deep($userData['kids']) : [];
         $address_1     = isset($userData['address_1']) ? sanitize_text_field($userData['address_1']) : '';
         $address_2     = isset($userData['address_2']) ? sanitize_text_field($userData['address_2']) : '';
         $zip_code     = isset($userData['zip_code']) ? sanitize_text_field($userData['zip_code']) : '';
@@ -11265,14 +11280,22 @@ class ComboStoreRest
         $delivery_location     = isset($userData['delivery_location']) ? stripslashes_deep($userData['delivery_location']) : '';
 
 
-
+        error_log(wp_json_encode($email));
 
         $userdata = array(
             'ID'          => $id,
             'first_name'  => $first_name,
             'last_name'   => $last_name,
             'display_name' => $name,
+            'user_email' => $email,
         );
+
+        // $userdata['ID'] = $id;
+        // $userdata['first_name'] = $first_name;
+        // $userdata['last_name'] = $last_name;
+        // $userdata['display_name'] = $name;
+        // $userdata['user_email'] = $email;
+
 
         $result = wp_update_user($userdata);
 
@@ -11292,6 +11315,14 @@ class ComboStoreRest
             update_user_meta($id, 'country', $country);
             update_user_meta($id, 'city', $city);
             update_user_meta($id, 'delivery_location', $delivery_location);
+
+            update_user_meta($id, 'phones', $phones);
+            update_user_meta($id, 'kids', $kids);
+            update_user_meta($id, 'customer_category', $customer_category);
+            update_user_meta($id, 'income', $income);
+            update_user_meta($id, 'profession', $profession);
+            update_user_meta($id, 'has_orderd', $has_orderd);
+
 
             $response['success'] = true;
         }
