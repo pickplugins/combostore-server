@@ -20,31 +20,29 @@ class ComboStoreRegister
     {
 
 
-
-        $password = isset($args['password']) ? $args['password'] : '';
+        $password = !empty($args['password']) ? $args['password'] : $this->generate_password();
         $role = isset($args['role']) ? $args['role'] : '';
         $mobile = isset($args['mobile']) ? $args['mobile'] : '';
         $email = isset($args['email']) ? $args['email'] : '';
         $registerBy = isset($args['registerBy']) ? $args['registerBy'] : 'email';
 
-error_log("registerBy: $registerBy");
 
 
-        if($registerBy == 'mobile'){
+        if ($registerBy == 'mobile') {
 
-            if(empty($mobile)){
+            if (empty($mobile)) {
                 $response['error'] = true;
                 $response['messages'] = ['Mobile number is required'];
                 return wp_json_encode($response);
             }
-            if(empty($password)){
+            if (empty($password)) {
                 $response['error'] = true;
                 $response['messages'] = ['Password is required'];
                 return wp_json_encode($response);
             }
 
 
-        $email =  $mobile.'@mo.lo';
+            $email =  $mobile . '@mo.lo';
         }
 
 
@@ -105,7 +103,7 @@ error_log("registerBy: $registerBy");
             $value = array_values($user_id->errors)[0];
             $message = $value[0];
 
-            
+
 
 
             $response['error'] = true;

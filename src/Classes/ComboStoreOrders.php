@@ -670,6 +670,8 @@ class ComboStoreOrders
             }
 
 
+            error_log(wp_json_encode($lineItems));
+
             $prams = [
                 "order_id" => $order_id,
                 "cartItems" => $lineItems,
@@ -932,7 +934,7 @@ class ComboStoreOrders
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
             $price         = isset($cartItem['price']) ? floatval($cartItem['price']) : 0.00;
-            $trade_price         = isset($cartItem['tradePrice']) ? floatval($cartItem['tradePrice']) : 0.00;
+            $trade_price   = isset($cartItem['trade_price']) ? floatval($cartItem['trade_price']) : 0.00;
             $subtotal      = isset($cartItem['subtotal']) ? floatval($cartItem['subtotal']) : 0.00;
             $tax           = isset($cartItem['tax']) ? floatval($cartItem['tax']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
@@ -1012,7 +1014,7 @@ class ComboStoreOrders
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
             $price         = isset($cartItem['price']) ? floatval($cartItem['price']) : 0.00;
-            $trade_price         = isset($cartItem['tradePrice']) ? floatval($cartItem['tradePrice']) : 0.00;
+            $trade_price         = isset($cartItem['trade_price']) ? floatval($cartItem['trade_price']) : 0.00;
             $subtotal      = isset($cartItem['subtotal']) ? floatval($cartItem['subtotal']) : 0.00;
             $tax           = isset($cartItem['tax']) ? floatval($cartItem['tax']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
