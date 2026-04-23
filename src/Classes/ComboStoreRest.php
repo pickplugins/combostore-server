@@ -3955,6 +3955,7 @@ class ComboStoreRest
             );
         }
 
+        //Hello
 
         if (!empty($brand)) {
             $tax_query[] = array(
