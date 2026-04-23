@@ -495,6 +495,9 @@ class ComboStoreOrders
     function update_order($params)
     {
 
+        $responses = [];
+
+
         global $wpdb;
         $prefix = $wpdb->prefix;
         $table = $prefix . 'cstore_orders';
@@ -609,11 +612,11 @@ class ComboStoreOrders
 
 
         if ($updated) {
-            $response = true;
-
+            $responses['success'] = true;
             $ComboStoreObjectMeta = new ComboStoreObjectMeta();
             $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
             $ComboStoreObjectMeta->update_meta('orders', $order_id, "coupons", $coupons);
+
 
 
             if ($status == 'completed') {
@@ -623,11 +626,26 @@ class ComboStoreOrders
 
                     $stockStatus = get_post_meta($product_id, 'stockStatus', true);
 
+                    if ($stockStatus == 'outofstock') {
+                        $responses['success'] = false;
+                        $responses['message'] = "Insufficient stock for product ID: $product_id";
+
+                        return $responses;
+                    }
+
                     if ($stockStatus == 'instock') {
                         $stockCount = intval(get_post_meta($product_id, 'stockCount', true));
 
+
+
+
                         $stockCount = $stockCount - $quantity;
+
+
+
                         if ($stockCount < 0) {
+                            $responses['success'] = false;
+                            $responses['message'] = "Insufficient stock for product ID: $product_id";
                             $stockCount = 0;
                         }
 
@@ -636,6 +654,11 @@ class ComboStoreOrders
 
                         if (!$stock_updated) {
                             update_post_meta($product_id, 'stockCount', $stockCount);
+
+                            if ($stockCount == 0) {
+                                update_post_meta($product_id, 'stockStatus', 'outofstock');
+                            }
+
                             $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
 
                             if ($stockCount < 5) {
@@ -670,7 +693,8 @@ class ComboStoreOrders
             }
 
 
-            error_log(wp_json_encode($lineItems));
+
+
 
             $prams = [
                 "order_id" => $order_id,
@@ -681,10 +705,10 @@ class ComboStoreOrders
 
             do_action("combo_store_order_updated", $action_prams);
         } else {
-            $response = false;
+            $responses['success'] = false;
             do_action("combo_store_order_update_failed", $action_prams);
         }
-        return $response;
+        return $responses;
     }
     function bulk_update_orders($params)
     {

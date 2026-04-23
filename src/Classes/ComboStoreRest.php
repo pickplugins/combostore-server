@@ -3477,7 +3477,6 @@ class ComboStoreRest
         $parent     = isset($request['parent']) ? (int) $request['parent'] : 0;
         $hierarchical     = isset($request['hierarchical']) ? (bool) $request['hierarchical'] : false;
 
-        error_log("hierarchical: " . $hierarchical);
 
         $tax_obj = get_taxonomy($taxonomy);
 
@@ -3914,6 +3913,7 @@ class ComboStoreRest
         $tag     = isset($request['tag']) ? sanitize_text_field($request['tag']) : "";
         $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
         $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
+        $stockStatus     = isset($request['stockStatus']) ? ($request['stockStatus']) : null;
 
         $is_admin     = isset($request['is_admin']) ? ($request['is_admin']) : false;
 
@@ -3985,6 +3985,8 @@ class ComboStoreRest
             );
         }
 
+
+
         if (!$is_admin) {
 
             $tax_query[] = array(
@@ -3994,6 +3996,20 @@ class ComboStoreRest
                 'operator'    => 'NOT IN',
             );
         }
+
+        if ($stockStatus) {
+
+            $meta_query[] = array(
+                'key' => 'stockStatus',
+                'value'    => $stockStatus,
+                'operator'    => '=',
+            );
+        }
+
+
+
+
+
 
 
 
@@ -4636,7 +4652,6 @@ class ComboStoreRest
 
         $body = $request->get_body();
 
-        error_log(wp_json_encode($body));
 
         $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 100;
@@ -4650,7 +4665,6 @@ class ComboStoreRest
         $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
         $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
 
-        error_log(`per_page: $per_page`);
 
         $query_args = [];
         $meta_query = [];
@@ -5783,7 +5797,6 @@ class ComboStoreRest
         $total_gross_profit_amount = $ComboStoreStats->get_total_gross_profit_amount($query_args);
         $total_net_profit_amount = $ComboStoreStats->get_total_net_profit_amount($query_args);
 
-        error_log(wp_json_encode($query_args));
 
         $total_purchase_amount = $ComboStoreStats->get_purchase_total_amount($query_args);
         $total_expenses_amount = $ComboStoreStats->get_expenses_total_amount($query_args);
@@ -7455,7 +7468,6 @@ class ComboStoreRest
         $brands = $request->get_param('brands');
         $tradePrice = $request->get_param('tradePrice');
 
-        error_log("post_status: " . $post_status);
 
         $tags = $tags ? $tags : [];
         $brands = $brands ? $brands : [];
@@ -7518,7 +7530,6 @@ class ComboStoreRest
 
         // $response = $ComboStoreProduct->update_product_data($body_arr);
 
-        error_log("featured: " . $body_arr['featured']);
 
         if (!empty($body_arr['sku'])) {
             update_post_meta($post_id, 'sku', $body_arr['sku']);
@@ -8289,12 +8300,13 @@ class ComboStoreRest
         $_response = $ComboStoreOrders->update_order($body_arr);
 
 
-        if ($_response) {
+
+        if ($_response['success']) {
             $response['status'] = "success";
             $response['message'] = "Order updated.";
         } else {
             $response['status'] = "failed";
-            $response['message'] = "There is an error.";
+            $response['message'] = $_response['message'] ?? "There is an error.";
         }
 
 
@@ -11280,7 +11292,6 @@ class ComboStoreRest
         $delivery_location     = isset($userData['delivery_location']) ? stripslashes_deep($userData['delivery_location']) : '';
 
 
-        error_log(wp_json_encode($email));
 
         $userdata = array(
             'ID'          => $id,
@@ -11408,8 +11419,6 @@ class ComboStoreRest
 
         // $query_args['fields'] = array( 'display_name' );
 
-
-        error_log(wp_json_encode($query_args));
 
 
         $posts = [];
@@ -12947,8 +12956,6 @@ class ComboStoreRest
         $id     = isset($request['id']) ? ($request['id']) : null;
         $blocks     = isset($request['blocks']) ? ($request['blocks']) : null;
 
-        error_log($id);
-        error_log(wp_json_encode($blocks));
 
         $response = [];
 
