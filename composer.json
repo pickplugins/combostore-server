@@ -1,0 +1,17 @@
+{
+    "name": "pickplugins/combo-store",
+    "autoload": {
+        "psr-4": {
+            "ComboStore\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Nur",
+            "email": "support@pickplugins.com"
+        }
+    ],
+    "require": {
+        "erusev/parsedown": "^1.7"
+    }
+}
