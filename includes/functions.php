@@ -123,3 +123,39 @@ add_action('user_register', function ($user_id) {
     update_user_meta($user_id, 'mobile_number', sanitize_text_field($_POST['mobile_number']));
   }
 });
+
+
+
+// add_filter('rest_authentication_errors', function ($result) {
+
+//   if (!empty($result)) {
+//     return $result;
+//   }
+
+//   $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+
+//   if ($auth) {
+//     $token = str_replace('Bearer ', '', $auth);
+//     if ($token == 'a3f9c1e8b7d4f6a9c2e5f8d1b3a6c9e7d0f2a4b6c8e1f3a5b7c9d2e4f6a8b0c1') {
+//       error_log($token);
+//       return true;
+//     }
+//   }
+
+//   return $result;
+// });
+
+
+// add_filter('rest_authentication_errors', function ($result) {
+//   if (strpos($_SERVER['REQUEST_URI'], '/wp-json/combo-store/v2/get_settings') !== false) {
+//     $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+//     error_log($_SERVER['REQUEST_URI']);
+//     $token = str_replace('Bearer ', '', $auth);
+
+//     if ($token == 'a3f9c1e8b7d4f6a9c2e5f8d1b3a6c9e7d0f2a4b6c8e1f3a5b7c9d2e4f6a8b0c1') {
+//       error_log($token);
+//       return true;
+//     }
+//   }
+//   return $result;
+// });

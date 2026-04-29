@@ -170,9 +170,42 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_settings'),
-                'permission_callback' => '__return_true',
+                // 'permission_callback' => '__return_true',
+                'permission_callback' => function ($request) {
+
+                    $api_key = $request->get_header('x-api-key');
+
+                    if (!$api_key) {
+                        return new WP_Error(
+                            'no_api_key',
+                            'API key missing',
+                            ['status' => 401]
+                        );
+                    }
+
+                    $settings = get_option('combo_store_settings');
+
+                    error_log(wp_json_encode($settings));
+
+                    $apiKeys = $settings['apiKeys'] ?? [];
+                    $apiToken = $apiKeys['apiToken']['key'] ?? [];
+
+
+
+                    if (!hash_equals($apiToken, $api_key)) {
+                        return new WP_Error(
+                            'invalid_api_key',
+                            'Invalid API key',
+                            ['status' => 403]
+                        );
+                    }
+
+                    return true;
+                },
             )
         );
+
+
         register_rest_route(
             'combo-store/v2',
             '/update_settings',
@@ -8060,30 +8093,35 @@ class ComboStoreRest
 
         $token = $request->get_header('Authorization');
 
+        error_log($token);
 
-        if (!$token) {
-            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-        }
+        // if (!$token) {
+        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        // }
 
-        // Remove "Bearer " prefix if present
-        $token = str_replace('Bearer ', '', $token);
+        // // Remove "Bearer " prefix if present
+        // $token = str_replace('Bearer ', '', $token);
 
-        // Decode the token
-        try {
-            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        } catch (Exception $e) {
-            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        }
+        // // Decode the token
+        // if ($token != 'a3f9c1e8b7d4f6a9c2e5f8d1b3a6c9e7d0f2a4b6c8e1f3a5b7c9d2e4f6a8b0c1') {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
+
+        // try {
+        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        // } catch (Exception $e) {
+        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        // }
 
 
         // Get user by ID
         // $user = get_user_by('id', $decoded_token->sub);
 
-        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
 
-        if (!$user_id) {
-            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        }
+        // if (!$user_id) {
+        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        // }
 
 
 
@@ -12958,6 +12996,8 @@ class ComboStoreRest
         $blocks     = isset($request['blocks']) ? ($request['blocks']) : null;
 
 
+        error_log(print_r($blocks, true));
+
         $response = [];
 
 
@@ -12966,7 +13006,7 @@ class ComboStoreRest
 
             $my_post = array(
                 'ID'           => $id,
-                'post_content' => wp_json_encode($blocks),
+                'post_content' => wp_json_encode($blocks, JSON_UNESCAPED_UNICODE),
             );
             wp_update_post($my_post);
             $response['success'] = true;
