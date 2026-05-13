@@ -23,7 +23,11 @@ class ComboStoreOrders
     {
 
 
-        $user_id         = isset($params['user_id']) ? intval($params['user_id']) : 0;
+
+
+        $user_id         = isset($params['userid']) ? intval($params['userid']) : 0;
+
+
 
 
         $order_note          = isset($params['order_note']) ? sanitize_text_field($params['order_note']) : '';
@@ -43,40 +47,27 @@ class ComboStoreOrders
         $payment_status  = isset($params['payment_status']) ? sanitize_text_field($params['payment_status']) : 'unpaid';
         $transaction_id  = isset($params['transaction_id']) ? sanitize_text_field($params['transaction_id']) : '';
         $shipping_method = isset($params['shipping_method']) ? sanitize_text_field($params['shipping_method']) : '';
-        $billing = isset($params['billing']) ? stripslashes_deep($params['billing']) : [];
-        $shipping = isset($params['shipping']) ? stripslashes_deep($params['shipping']) : [];
+
         $subscription = isset($params['subscription']) ? stripslashes_deep($params['subscription']) : [];
 
-        $billing_name    = isset($billing['name']) ? sanitize_text_field($billing['name']) : '';
-        $billing_firstName    = isset($billing['firstName']) ? sanitize_text_field($billing['firstName']) : '';
-        $billing_lastName    = isset($billing['lastName']) ? sanitize_text_field($billing['lastName']) : '';
-        $billing_company    = isset($billing['company']) ? sanitize_text_field($billing['company']) : '';
-        $billing_address1    = isset($billing['address1']) ? sanitize_text_field($billing['address1']) : '';
-        $billing_address2    = isset($billing['address2']) ? sanitize_text_field($billing['address2']) : '';
-        $billing_country    = isset($billing['country']) ? sanitize_text_field($billing['country']) : '';
-        $billing_city    = isset($billing['city']) ? sanitize_text_field($billing['city']) : '';
-        $billing_phone    = isset($billing['phone']) ? sanitize_text_field($billing['phone']) : '';
-        $billing_email    = isset($billing['email']) ? sanitize_email($billing['email']) : '';
+        $billing_name    = isset($params['billing_name']) ? sanitize_text_field($params['billing_name']) : '';
+        $billing_address    = isset($params['billing_address']) ? sanitize_text_field($params['billing_address']) : '';
+        $billing_phone    = isset($params['billing_phone']) ? sanitize_text_field($params['billing_phone']) : '';
+        $billing_country    = isset($params['billing_country']) ? sanitize_text_field($params['billing_country']) : '';
+        $billing_city    = isset($params['billing_city']) ? sanitize_text_field($params['billing_city']) : '';
+        $billing_email    = isset($params['billing_email']) ? sanitize_email($params['billing_email']) : '';
 
-        $shipping_name    = isset($shipping['name']) ? sanitize_text_field($shipping['name']) : '';
-        $shipping_firstName    = isset($shipping['firstName']) ? sanitize_text_field($shipping['firstName']) : '';
-        $shipping_lastName    = isset($shipping['lastName']) ? sanitize_text_field($shipping['lastName']) : '';
-        $shipping_company    = isset($shipping['company']) ? sanitize_text_field($shipping['company']) : '';
-        $shipping_address1    = isset($shipping['address1']) ? sanitize_text_field($shipping['address1']) : '';
-        $shipping_address2    = isset($shipping['address2']) ? sanitize_text_field($shipping['address2']) : '';
-        $shipping_country    = isset($shipping['country']) ? sanitize_text_field($shipping['country']) : '';
-        $shipping_city    = isset($shipping['city']) ? sanitize_text_field($shipping['city']) : '';
-        $shipping_phone    = isset($shipping['phone']) ? sanitize_text_field($shipping['phone']) : '';
-        $shipping_email    = isset($shipping['email']) ? sanitize_email($shipping['email']) : '';
+        $shipping_name    = isset($params['shipping_name']) ? sanitize_text_field($params['shipping_name']) : '';
+        $shipping_phone    = isset($params['shipping_phone']) ? sanitize_text_field($params['shipping_phone']) : '';
+        $shipping_address    = isset($params['shipping_address']) ? sanitize_text_field($params['shipping_address']) : '';
+        $shipping_country    = isset($params['shipping_country']) ? sanitize_text_field($params['shipping_country']) : '';
+        $shipping_city    = isset($params['shipping_city']) ? sanitize_text_field($params['shipping_city']) : '';
+        $shipping_email    = isset($params['shipping_email']) ? sanitize_email($params['shipping_email']) : '';
 
         $subscription_enable    = isset($subscription['enable']) ? sanitize_text_field($subscription['enable']) : '';
         $subscription_interval    = isset($subscription['interval']) ? sanitize_text_field($subscription['interval']) : '';
         $subscription_interval_count    = isset($subscription['interval_count']) ? sanitize_text_field($subscription['interval_count']) : '';
 
-        $billing_address = "$billing_address1 $billing_address2";
-
-        $shipping_name   = $shipping_name ? "$shipping_name" : "";
-        $shipping_address =  $shipping_address1 ? "$shipping_address1 $shipping_address2" : "";
 
         $cartItems = isset($params['cartItems']) ? stripslashes_deep($params['cartItems']) : [];
         $delivery_location = isset($params['delivery_location']) ? stripslashes_deep($params['delivery_location']) : [];
@@ -113,7 +104,6 @@ class ComboStoreOrders
 
 
 
-
         global $wpdb;
         $prefix = $wpdb->prefix;
         $table = $prefix . 'cstore_orders';
@@ -136,13 +126,19 @@ class ComboStoreOrders
             'payment_status'  => $payment_status,
             'transaction_id'  => $transaction_id,
             'shipping_method' => $shipping_method,
+
             'billing_name'    => $billing_name,
             'billing_email'   => $billing_email,
             'billing_phone'   => $billing_phone,
             'billing_address' => $billing_address,
+            'billing_city'    => $billing_city,
+            'billing_country' => $billing_country,
+
             'shipping_name'   => $shipping_name,
             'shipping_phone'  => $shipping_phone,
             'shipping_address' => $shipping_address,
+            'shipping_city'   => $shipping_city,
+            'shipping_country' => $shipping_country,
             'created_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
             'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
         );
@@ -167,9 +163,13 @@ class ComboStoreOrders
             '%s',   // billing_email
             '%s',   // billing_phone
             '%s',   // billing_address
+            '%s',   // billing_city
+            '%s',   // billing_country
             '%s',   // shipping_name
             '%s',   // shipping_phone
             '%s',   // shipping_address
+            '%s',   // shipping_city
+            '%s',   // shipping_country
             '%s',   // created_at
             '%s'    // updated_at
         );
@@ -437,7 +437,7 @@ class ComboStoreOrders
 
             $sql = "SELECT * FROM $table_orders
                     $where_sql
-                    ORDER BY id $order
+                    ORDER BY created_at $order
                     LIMIT %d, %d";
 
             $params[] = (int) $offset;
@@ -450,7 +450,7 @@ class ComboStoreOrders
 
             $total = count($entries);
         } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
+            $entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE userid='$user_id' ORDER BY created_at $order limit $offset, $per_page");
             $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_orders WHERE userid='$user_id'");
         }
 
@@ -519,9 +519,14 @@ class ComboStoreOrders
         $billing_name  = isset($params['billing_name']) ? sanitize_text_field($params['billing_name']) : null;
         $billing_address  = isset($params['billing_address']) ? sanitize_text_field($params['billing_address']) : null;
         $billing_phone  = isset($params['billing_phone']) ? sanitize_text_field($params['billing_phone']) : null;
+        $billing_city  = isset($params['billing_city']) ? sanitize_text_field($params['billing_city']) : null;
+        $billing_country  = isset($params['billing_country']) ? sanitize_text_field($params['billing_country']) : null;
+
         $shipping_name  = isset($params['shipping_name']) ? sanitize_text_field($params['shipping_name']) : null;
         $shipping_phone  = isset($params['shipping_phone']) ? sanitize_text_field($params['shipping_phone']) : null;
         $shipping_address  = isset($params['shipping_address']) ? sanitize_text_field($params['shipping_address']) : null;
+        $shipping_city  = isset($params['shipping_city']) ? sanitize_text_field($params['shipping_city']) : null;
+        $shipping_country  = isset($params['shipping_country']) ? sanitize_text_field($params['shipping_country']) : null;
 
 
 
@@ -563,9 +568,13 @@ class ComboStoreOrders
             'billing_email'   => $billing_email,
             'billing_phone'   => $billing_phone,
             'billing_address' => $billing_address,
+            'billing_city'    => $billing_city,
+            'billing_country' => $billing_country,
             'shipping_name'   => $shipping_name,
             'shipping_phone'  => $shipping_phone,
             'shipping_address' => $shipping_address,
+            'shipping_city'   => $shipping_city,
+            'shipping_country' => $shipping_country,
             'created_at'      => $created_at,
             'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
         );
@@ -591,9 +600,13 @@ class ComboStoreOrders
             '%s',   // billing_email
             '%s',   // billing_phone
             '%s',   // billing_address
+            '%s',   // billing_city
+            '%s',   // billing_country
             '%s',   // shipping_name
             '%s',   // shipping_phone
             '%s',   // shipping_address
+            '%s',   // shipping_city
+            '%s',   // shipping_country
             '%s',   // created_at
             '%s',   // updated_at
         );

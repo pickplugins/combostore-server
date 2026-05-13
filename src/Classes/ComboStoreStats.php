@@ -596,8 +596,6 @@ class ComboStoreStats
     FROM date_series ds
     LEFT JOIN $table_orders o 
         ON DATE(o.created_at) = ds.order_date
-    LEFT JOIN $table_items oi 
-        ON o.id = oi.order_id
     $where
     GROUP BY $date_format
     ORDER BY $date_format ASC
@@ -607,6 +605,8 @@ class ComboStoreStats
         $prepared_query = $wpdb->prepare($query, $date_from, $date_to);
 
         $results = $wpdb->get_results($prepared_query, ARRAY_A);
+
+        error_log(wp_json_encode($results));
 
         return $results;
     }

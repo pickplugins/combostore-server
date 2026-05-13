@@ -246,7 +246,11 @@ do not add any other text.
         $job_category = "";
         $response = [];
 
+        $settings = get_option('combo_store_settings');
 
+        $apiKeys = $settings['apiKeys'] ?? [];
+        $geminiApiKey = $apiKeys['gemini']['key'] ?? '';
+        $model = $apiKeys['gemini']['model'] ?? 'gemini-2.0-flash';
 
 
         // $tax_query[] = array(
@@ -336,7 +340,7 @@ Please do not add any other text and reference.
 
 
                 // Gemini API endpoint
-                $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyDDxpa0KvgO2MSKMv2CO-ilx8ihslV1bQg";
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiApiKey";
 
                 // Your prompt/input
                 $data = [
@@ -417,7 +421,11 @@ Please do not add any other text and reference.
         $job_category = "";
         $response = [];
 
+        $settings = get_option('combo_store_settings');
 
+        $apiKeys = $settings['apiKeys'] ?? [];
+        $geminiApiKey = $apiKeys['gemini']['key'] ?? '';
+        $model = $apiKeys['gemini']['model'] ?? 'gemini-2.0-flash';
 
 
         // $tax_query[] = array(
@@ -521,7 +529,7 @@ Automatically generate SEO keywords naturally based on the product type.
 
 
                 // Gemini API endpoint
-                $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyDDxpa0KvgO2MSKMv2CO-ilx8ihslV1bQg";
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiApiKey";
 
                 // Your prompt/input
                 $data = [

@@ -25,10 +25,21 @@ class ComboStoreRegister
         $mobile = isset($args['mobile']) ? $args['mobile'] : '';
         $email = isset($args['email']) ? $args['email'] : '';
         $registerBy = isset($args['registerBy']) ? $args['registerBy'] : 'email';
+        $name = isset($args['name']) ? $args['name'] : '';
 
 
 
         if ($registerBy == 'mobile') {
+
+            $blogusers = get_users('meta_value=' . $mobile . '&meta_key=mobile');
+            error_log(wp_json_encode($blogusers));
+
+            if (count($blogusers) > 0) {
+                $response['error'] = true;
+                $response['messages'] = ['Mobile number already exists.'];
+                return wp_json_encode($response);
+            }
+
 
             if (empty($mobile)) {
                 $response['error'] = true;
@@ -77,13 +88,12 @@ class ComboStoreRegister
 
 
 
-        // $userdata = array(
-        //     'user_login'    => $email,
-        //     'user_pass'     => $password,
-        //     'display_name'  => $email,
-        // );
+        $userdata = array(
+            'ID'    => $user_id,
+            'display_name'  => $name,
+        );
 
-        // wp_insert_user($userdata);
+        wp_update_user($userdata);
 
 
 

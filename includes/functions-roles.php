@@ -39,6 +39,16 @@ function combo_store_add_role_affiliates()
       'manage_options' => false,
     ]
   );
+  add_role(
+    'store_manager',
+    'Store Manager',
+    [
+      'read' => true,
+      'edit_posts' => false,
+      'publish_posts' => false,
+      'manage_options' => false,
+    ]
+  );
 
   add_role(
     'supplier',
