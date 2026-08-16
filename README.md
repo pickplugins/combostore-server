@@ -1,14 +1,15 @@
-===  Email validation - Server ===
+===  ComboStore Server ===
 	Contributors: PickPlugins
-	Donate link: https://www.pickplugins.com/Email validation
-	Tags: product slider, woocommerce slider, carousel slider, product category slider, woo slider, carousel slider,  woocommerce product slider
+	Donate link: https://www.pickplugins.com/
+	Tags: eCommerce 
 	Requires at least: 3.8
 	Tested up to: 6.7
-	Stable tag: 1.0.6
+	Stable tag: 1.0.0
 	License: GPLv2 or later
 	License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-	Fully responsive and mobile ready Carousel Slider for your woo-commerce product. unlimited slider anywhere via short-codes and easy admin setting.
+The plugin is designed to work with a Next.js frontend, typically deployed on Vercel, while WordPress acts as the backend/API server.
+
 
 == Description ==
 
