@@ -14,91 +14,92 @@ The plugin is designed to work with a Next.js frontend, typically deployed on Ve
 == Description ==
 
 
-
 # ComboStore Server
 
-**ComboStore Server** is a WordPress plugin that provides the backend infrastructure for **ComboStore**, a modern Next.js-based eCommerce platform powered by WordPress.
+**ComboStore Server** is a WordPress plugin that provides the backend/API functionality for **ComboStore**, a modern Next.js-based eCommerce platform powered by WordPress.
 
-It extends WordPress with custom REST APIs, database tables, authentication, eCommerce functionality, order management, shipping, payments, customers, products, and other services required by the ComboStore frontend.
-
-The plugin is designed to work with a **Next.js frontend**, typically deployed on Vercel, while WordPress acts as the backend/API server.
-
----
-
-## Architecture
-
-ComboStore uses a decoupled/headless architecture:
-
-```text
-                    ┌──────────────────────┐
-                    │      Customer        │
-                    │      Browser         │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   ComboStore Next.js  │
-                    │       Frontend       │
-                    │      Vercel/CDN      │
-                    └──────────┬───────────┘
-                               │
-                         REST API / HTTPS
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   WordPress Server   │
-                    │  ComboStore Server   │
-                    │       Plugin         │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │      MySQL / DB      │
-                    └──────────────────────┘
-```
-
-### Components
-
-* **Frontend:** Next.js
-* **Backend:** WordPress
-* **Backend Plugin:** ComboStore Server
-* **Database:** MySQL/MariaDB
-* **Frontend Hosting:** Vercel or other Node.js hosting
-* **Backend Hosting:** Any WordPress-compatible hosting
-* **Communication:** REST API over HTTPS
+The plugin extends WordPress with the REST APIs and backend functionality required by the ComboStore frontend, including checkout, orders, payments, shipping, customers, and other eCommerce services.
 
 ---
 
 # Requirements
 
-Before installing the plugin, make sure your server meets the following requirements.
+Before installing ComboStore Server, make sure your server meets the following requirements.
 
 ### WordPress
 
 * WordPress 6.x or later
 * Pretty Permalinks enabled
-* REST API enabled
+* WordPress REST API enabled
 * HTTPS/SSL strongly recommended
 
 ### PHP
 
-* PHP 8.1+
-* PHP extensions required by WordPress
+* PHP 8.1 or later
+* Standard PHP extensions required by WordPress
 * MySQLi/PDO support
 
 ### Database
 
 * MySQL 5.7+ or MariaDB equivalent
 
-### Frontend
+---
 
-ComboStore Server is designed to work with the ComboStore Next.js application.
+# Required WordPress Plugins
 
-Recommended:
+ComboStore Server requires the following WordPress plugins to be installed and activated.
 
-* Node.js 20+
-* Next.js
-* HTTPS-enabled frontend domain
+## Enable CORS
+
+**Enable CORS** allows the ComboStore Next.js frontend to communicate with the WordPress REST API from a different domain.
+
+Install from the official WordPress Plugin Directory:
+
+https://wordpress.org/plugins/enable-cors/
+
+After installation, activate the plugin from:
+
+```text
+WordPress Admin
+→ Plugins
+→ Installed Plugins
+→ Enable CORS
+```
+
+## JWT Authentication for WP REST API
+
+ComboStore Server uses JWT-based authentication for secure communication between the frontend and WordPress REST API.
+
+Install:
+
+https://wordpress.org/plugins/jwt-authentication-for-wp-rest-api/
+
+After installation, activate the plugin from:
+
+```text
+WordPress Admin
+→ Plugins
+→ Installed Plugins
+→ JWT Authentication for WP REST API
+```
+
+### JWT Configuration
+
+The JWT Authentication plugin requires the WordPress server to support the appropriate HTTP authorization headers.
+
+Depending on the hosting environment, additional server configuration may be required.
+
+For Apache, this may require:
+
+```apache
+RewriteEngine on
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]
+```
+
+For Nginx, make sure the `Authorization` header is forwarded to PHP correctly.
+
+> Always use HTTPS when using JWT authentication in production.
 
 ---
 
@@ -106,13 +107,11 @@ Recommended:
 
 ## 1. Upload the Plugin
 
-Upload the plugin to:
+Upload the ComboStore Server plugin to:
 
 ```text
 /wp-content/plugins/combostore-server/
 ```
-
-The directory should contain the main plugin file and its required dependencies.
 
 Example:
 
@@ -120,9 +119,9 @@ Example:
 combostore-server/
 ├── combostore-server.php
 ├── includes/
-├── admin/
 ├── api/
 ├── database/
+├── admin/
 ├── assets/
 └── readme.md
 ```
@@ -139,458 +138,44 @@ WordPress Admin
 
 Find **ComboStore Server** and click **Activate**.
 
-During activation, the plugin will create or update the required database tables.
-
----
-
-# Configuration
-
-After activation, configure the plugin from the WordPress administration area.
-
-Typical configuration includes:
-
-* Store settings
-* API settings
-* Authentication
-* Shipping
-* Payment gateways
-* Email
-* CORS
-* Security
-* Webhooks
-* Frontend application settings
-
----
-
-# Environment Configuration
-
-The ComboStore Next.js frontend should store backend URLs and secrets in environment variables.
-
-Example:
-
-```env
-NEXT_PUBLIC_STORE_URL=https://example.com
-NEXT_PUBLIC_SERVER_URL=https://server.example.com
-NEXT_PUBLIC_APP_URL=https://dashboard.example.com
-```
-
-### Important
-
-Do **not** expose private API keys, secret keys, JWT secrets, payment credentials, or database credentials through `NEXT_PUBLIC_*` variables.
-
-Anything prefixed with `NEXT_PUBLIC_` can be exposed to the browser.
-
-Private credentials should remain on the WordPress server or inside server-side Next.js environment variables.
+During activation, the plugin will create or update the required database structures.
 
 ---
 
 # REST API
 
-ComboStore Server provides REST API endpoints for communication with the Next.js frontend.
+ComboStore Server provides REST API endpoints for communication with the ComboStore Next.js frontend.
 
-The general API structure is:
-
-```text
-https://server.example.com/wp-json/
-```
-
-ComboStore-specific endpoints may use a namespace such as:
+The WordPress REST API is available through:
 
 ```text
-https://server.example.com/wp-json/combostore/v1/
+https://your-domain.com/wp-json/
 ```
+
+ComboStore-specific endpoints use the ComboStore API namespace.
 
 Example:
 
 ```text
-GET /wp-json/combostore/v1/products
+https://your-domain.com/wp-json/combostore/v1/
 ```
 
-```text
-GET /wp-json/combostore/v1/products/{id}
-```
+Example endpoints:
 
 ```text
+GET  /wp-json/combostore/v1/products
+GET  /wp-json/combostore/v1/products/{id}
 POST /wp-json/combostore/v1/orders
+GET  /wp-json/combostore/v1/orders/{id}
 ```
 
-```text
-GET /wp-json/combostore/v1/orders/{id}
-```
-
-> Always use HTTPS in production.
-
----
-
-# Authentication
-
-ComboStore Server supports authenticated API requests.
-
-Depending on the implementation, authentication can be handled through:
-
-* WordPress authentication
-* JWT
-* API keys
-* Application authentication
-* Custom ComboStore authentication
-
-Authenticated requests should send the required credentials using HTTP headers.
-
-Example:
-
-```http
-Authorization: Bearer YOUR_TOKEN
-```
-
-If an API key is required:
-
-```http
-X-API-Key: YOUR_API_KEY
-```
-
-Never place secret credentials inside frontend source code.
-
----
-
-# CORS
-
-Because ComboStore commonly uses separate frontend and backend domains, CORS must be configured correctly.
-
-Example:
-
-```text
-Frontend:
-https://store.example.com
-
-Backend:
-https://server.example.com
-```
-
-The WordPress server must allow requests from the trusted frontend origin.
-
-Example response headers:
-
-```http
-Access-Control-Allow-Origin: https://store.example.com
-Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
-Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key
-```
-
-### Production Recommendation
-
-Do not use:
-
-```http
-Access-Control-Allow-Origin: *
-```
-
-when authenticated requests or private customer data are involved.
-
-Allow only trusted frontend domains.
-
----
-
-# Database
-
-ComboStore Server uses custom WordPress database tables for eCommerce-specific data.
-
-Typical tables include:
-
-```text
-wp_cstore_orders
-wp_cstore_order_items
-wp_cstore_purchases
-wp_cstore_expenses
-wp_cstore_shipping_zones
-wp_cstore_shipping_zone_locations
-wp_cstore_shipping_methods
-wp_cstore_shipping_rates
-wp_cstore_pickup_locations
-wp_cstore_shipping_carriers
-```
-
-The actual WordPress database prefix may be different.
-
-For example:
-
-```text
-wp_
-```
-
-could be:
-
-```text
-abc_
-```
-
-The plugin should always use:
-
-```php
-$wpdb->prefix
-```
-
-instead of assuming that the database prefix is `wp_`.
-
----
-
-# Orders
-
-The order system manages the complete customer purchase lifecycle.
-
-An order may contain:
-
-* Customer information
-* Billing information
-* Shipping information
-* Products
-* Quantities
-* Prices
-* Discounts
-* Shipping charges
-* Taxes
-* Payment method
-* Payment status
-* Order status
-* Shipping method
-* Tracking information
-* Order notes
-
-Example order flow:
-
-```text
-Pending
-   ↓
-Processing
-   ↓
-Packed
-   ↓
-Shipped
-   ↓
-Delivered
-```
-
-Orders may also be:
-
-```text
-Cancelled
-Refunded
-Failed
-```
-
-depending on the business workflow.
-
----
-
-# Products
-
-Product information can be managed through WordPress and exposed through the ComboStore API.
-
-Depending on the implementation, products may support:
-
-* Product title
-* Description
-* Short description
-* SKU
-* Price
-* Sale price
-* Stock
-* Images
-* Categories
-* Tags
-* Attributes
-* Variations
-* Weight
-* Dimensions
-* Status
-
-The Next.js frontend retrieves product data through the REST API.
-
----
-
-# Customers
-
-ComboStore Server manages customer-related information required for orders and checkout.
-
-Customer data may include:
-
-* Name
-* Email
-* Phone
-* Billing address
-* Shipping address
-* Order history
-* Customer notes
-
-Sensitive customer information should only be returned through authenticated endpoints where appropriate.
-
----
-
-# Shipping
-
-ComboStore Server supports configurable shipping methods and shipping zones.
-
-The shipping system can be organized as:
-
-```text
-Shipping Zone
-    ↓
-Zone Location
-    ↓
-Shipping Method
-    ↓
-Shipping Rate
-```
-
-Example:
-
-```text
-Bangladesh
- ├── Rangpur
- │    ├── Home Delivery
- │    └── Local Pickup
- │
- └── Dhaka
-      └── Courier Delivery
-```
-
-Shipping rates can depend on factors such as:
-
-* Location
-* Order amount
-* Product
-* Weight
-* Quantity
-* Shipping method
-* Delivery zone
-
----
-
-# Multiple Shipping Methods
-
-An order containing multiple products may require different delivery rules.
-
-The shipping calculation should determine the applicable methods based on:
-
-1. Customer location
-2. Product shipping requirements
-3. Shipping zone
-4. Shipping method
-5. Shipping rate
-6. Order contents
-
-The final checkout response should provide the available shipping options and their calculated prices.
-
----
-
-# Payment Gateways
-
-ComboStore Server can integrate with payment gateways through backend APIs.
-
-Examples include:
-
-* bKash
-* Nagad
-* AamarPay
-* SSLCommerz
-* Cash on Delivery
-* Custom payment gateways
-
-Payment gateway credentials must be stored securely on the backend.
-
-Never expose merchant secrets in:
-
-```text
-NEXT_PUBLIC_*
-```
-
-environment variables.
-
-The recommended architecture is:
-
-```text
-Next.js
-   │
-   │ Create Payment
-   ▼
-WordPress API
-   │
-   ▼
-Payment Gateway
-   │
-   ▼
-Payment Callback/Webhook
-   │
-   ▼
-WordPress
-   │
-   ▼
-Update Order
-```
-
----
-
-# Webhooks & Callbacks
-
-Payment providers may send callbacks or webhooks to the WordPress server.
-
-The callback endpoint should:
-
-1. Validate the request.
-2. Verify the payment transaction.
-3. Identify the order.
-4. Confirm the payment status.
-5. Update the order.
-6. Prevent duplicate processing.
-
-Never trust a payment status received directly from the browser.
-
-Payment verification should happen server-side.
-
----
-
-# Security
-
-Security is a major requirement because ComboStore handles customer and order information.
-
-### Recommended Practices
-
-* Always use HTTPS.
-* Validate all API requests.
-* Sanitize input.
-* Escape output.
-* Use `$wpdb->prepare()` for SQL queries.
-* Validate authentication tokens.
-* Restrict CORS origins.
-* Protect administrative endpoints.
-* Verify payment callbacks.
-* Never expose database credentials.
-* Never expose private API secrets.
-* Rate-limit sensitive endpoints where appropriate.
-
-### SQL Queries
-
-Always use prepared statements.
-
-Correct:
-
-```php
-$wpdb->prepare(
-    "SELECT * FROM {$table_orders} WHERE id = %d",
-    $order_id
-);
-```
-
-Avoid:
-
-```php
-"SELECT * FROM {$table_orders} WHERE id = $order_id"
-```
+The exact available endpoints depend on the installed version of ComboStore Server.
 
 ---
 
 # API Error Response
 
-APIs should return consistent JSON responses.
+ComboStore APIs should return consistent JSON responses.
 
 Example success response:
 
@@ -609,13 +194,11 @@ Example error response:
 ```json
 {
     "success": false,
-    "message": "Invalid order ID"
+    "message": "Invalid request"
 }
 ```
 
-HTTP status codes should be used appropriately.
-
-Common codes:
+Common HTTP status codes include:
 
 ```text
 200 OK
@@ -631,21 +214,89 @@ Common codes:
 
 ---
 
-# Development
+# Payment Gateways
 
-Clone or download the plugin source code into the WordPress plugins directory.
+ComboStore Server can integrate with payment gateways through backend APIs.
 
-Example:
+Supported or planned integrations may include:
 
-```bash
-cd wp-content/plugins
+* bKash
+* Nagad
+* AamarPay
+* SSLCommerz
+* Cash on Delivery
+* Custom payment gateways
 
-git clone YOUR_REPOSITORY_URL combostore-server
+Payment gateway credentials must be stored securely on the server.
+
+Private merchant credentials must never be exposed to the browser or included in public frontend environment variables.
+
+Recommended payment flow:
+
+```text
+Next.js Frontend
+       │
+       ▼
+ComboStore REST API
+       │
+       ▼
+Payment Gateway
+       │
+       ▼
+Payment Verification
+       │
+       ▼
+Update Order
 ```
 
-Activate the plugin from WordPress Admin.
+Payment verification should always be performed server-side.
 
-For development, enable WordPress debugging:
+---
+
+# Security
+
+ComboStore Server handles customer, order, payment, and other potentially sensitive information.
+
+Follow these security practices:
+
+* Always use HTTPS.
+* Keep WordPress and all plugins updated.
+* Keep ComboStore Server updated.
+* Use strong WordPress administrator passwords.
+* Protect JWT secrets.
+* Protect API keys.
+* Never expose payment gateway secrets.
+* Validate all API input.
+* Sanitize database input.
+* Escape output.
+* Use `$wpdb->prepare()` for SQL queries.
+* Restrict API access where appropriate.
+* Maintain regular backups.
+
+### SQL Queries
+
+Always use prepared statements.
+
+Correct:
+
+```php
+$wpdb->prepare(
+    "SELECT * FROM {$table_orders} WHERE id = %d",
+    $order_id
+);
+```
+
+Avoid directly inserting variables into SQL queries:
+
+```php
+"SELECT * FROM {$table_orders} WHERE id = $order_id"
+```
+
+---
+
+# Development
+
+For development, enable WordPress debugging when required:
 
 ```php
 define('WP_DEBUG', true);
@@ -653,176 +304,13 @@ define('WP_DEBUG_LOG', true);
 define('WP_DEBUG_DISPLAY', false);
 ```
 
-Logs will normally be available at:
+WordPress debug logs are normally available at:
 
 ```text
 wp-content/debug.log
 ```
 
----
-
-# Code Structure
-
-A recommended structure is:
-
-```text
-combostore-server/
-│
-├── combostore-server.php
-│
-├── includes/
-│   ├── class-database.php
-│   ├── class-auth.php
-│   ├── class-settings.php
-│   └── helpers.php
-│
-├── api/
-│   ├── products/
-│   ├── orders/
-│   ├── customers/
-│   ├── shipping/
-│   ├── payments/
-│   └── users/
-│
-├── database/
-│   ├── class-install.php
-│   ├── class-upgrade.php
-│   └── migrations/
-│
-├── admin/
-│   ├── settings/
-│   └── pages/
-│
-├── integrations/
-│   ├── bkash/
-│   ├── nagad/
-│   ├── aamarpay/
-│   └── sslcommerz/
-│
-├── assets/
-│
-├── languages/
-│
-└── readme.md
-```
-
-The exact structure may differ depending on the implementation.
-
----
-
-# Database Migrations
-
-When modifying database structures, avoid directly changing existing production tables.
-
-Instead, create a database version and migration process.
-
-Example:
-
-```php
-define('CSTORE_DB_VERSION', '1.2.0');
-```
-
-When the plugin is upgraded:
-
-```text
-1.0.0
-   ↓
-1.1.0
-   ↓
-1.2.0
-```
-
-Each migration should be executed only once.
-
-This prevents existing customer/order data from being lost during plugin updates.
-
----
-
-# Production Deployment
-
-Recommended production architecture:
-
-```text
-                 Internet
-                    │
-          ┌─────────┴─────────┐
-          │                   │
-          ▼                   ▼
-     Next.js App         WordPress API
-       Vercel              Server
-          │                   │
-          └─────────┬─────────┘
-                    │
-                 MySQL
-```
-
-### Frontend
-
-Deploy the ComboStore Next.js application to:
-
-* Vercel
-* VPS
-* Dedicated server
-* Other supported hosting
-
-### Backend
-
-Deploy WordPress + ComboStore Server to:
-
-* VPS
-* CloudPanel
-* Managed WordPress hosting
-* cPanel
-* Other WordPress-compatible hosting
-
----
-
-# Updating the Plugin
-
-Before updating the plugin:
-
-1. Backup the database.
-2. Backup the plugin files.
-3. Check the migration/version requirements.
-4. Update the plugin.
-5. Verify REST APIs.
-6. Verify checkout.
-7. Verify payment gateways.
-8. Verify shipping calculations.
-9. Verify existing orders.
-
-Never deploy database changes to production without a backup.
-
----
-
-# Environment Separation
-
-For larger deployments, maintain separate environments:
-
-```text
-Development
-     ↓
-Staging
-     ↓
-Production
-```
-
-Example:
-
-```text
-dev-server.example.com
-staging-server.example.com
-server.example.com
-```
-
-Each environment should use its own:
-
-* Database
-* API credentials
-* Payment credentials
-* API keys
-* Frontend URL
-* CORS configuration
+Do not enable displaying PHP errors directly to visitors on a production website.
 
 ---
 
@@ -833,7 +321,9 @@ Each environment should use its own:
 Check:
 
 ```text
-WordPress → Settings → Permalinks
+WordPress Admin
+→ Settings
+→ Permalinks
 ```
 
 Save the permalink settings again.
@@ -847,17 +337,18 @@ Then test:
 If the REST API is unavailable, check:
 
 * WordPress REST API
-* Rewrite rules
+* Permalink configuration
 * Server configuration
-* SSL
-* Security/firewall plugins
+* SSL certificate
+* Firewall/security plugins
 * PHP errors
+* Server logs
 
 ---
 
 ## CORS Error
 
-If the browser reports:
+If the browser reports an error such as:
 
 ```text
 Access-Control-Allow-Origin
@@ -869,31 +360,32 @@ or:
 Request header field authorization is not allowed
 ```
 
-check the server's CORS configuration.
+make sure the **Enable CORS** plugin is installed and activated.
 
-Make sure required headers are allowed:
+Also verify that the server allows the required HTTP methods and headers.
+
+Typical headers required by ComboStore include:
 
 ```text
 Content-Type
 Authorization
-X-API-Key
 ```
 
-Also make sure the frontend origin is explicitly allowed.
+If ComboStore uses additional API headers, those headers must also be allowed by the server.
 
 ---
 
-## Authentication Error
+## JWT Authentication Error
 
-Check:
+If authentication fails, check:
 
-* Token validity
-* API key
-* Authorization header
-* Token expiration
-* WordPress user permissions
-* Server clock/timezone
-* CORS configuration
+* JWT Authentication for WP REST API is activated.
+* HTTPS is enabled.
+* The JWT secret is configured correctly.
+* The `Authorization` header reaches WordPress/PHP.
+* The WordPress user credentials are correct.
+* The token has not expired.
+* Server rewrite configuration is correct.
 
 ---
 
@@ -907,41 +399,54 @@ wp-content/debug.log
 
 Also verify:
 
-* Database credentials
-* Table names
+* Database connection
 * Database permissions
-* Migration version
+* Table names
 * SQL syntax
+* Plugin database version
+* Server PHP version
 
 ---
 
 # Backup
 
-Before performing major updates:
+Before updating ComboStore Server or making significant changes:
 
-### Database
+1. Back up the WordPress database.
+2. Back up the plugin files.
+3. Verify that the backup can be restored.
+4. Update the plugin.
+5. Test the REST API.
+6. Test checkout and payment functionality.
 
-Create a complete MySQL/MariaDB backup.
+For production stores, automated database backups are strongly recommended.
 
-### Files
+---
 
-Back up:
+# Updating the Plugin
+
+Before updating:
 
 ```text
-wp-content/plugins/combostore-server/
+1. Backup database
+2. Backup plugin files
+3. Check release notes
+4. Update ComboStore Server
+5. Verify REST API
+6. Verify checkout
+7. Verify payment gateways
+8. Verify shipping
 ```
 
-and any custom configuration.
-
-For production stores, automated daily database backups are strongly recommended.
+Do not perform major production updates without a recent backup.
 
 ---
 
 # API Documentation
 
-API documentation should be maintained separately as the API grows.
+API documentation should be maintained as the ComboStore API evolves.
 
-Recommended documentation structure:
+Recommended API documentation sections:
 
 ```text
 API
@@ -963,7 +468,7 @@ Each endpoint should document:
 
 * HTTP method
 * Endpoint
-* Authentication
+* Authentication requirements
 * Parameters
 * Request body
 * Response
@@ -974,18 +479,18 @@ Each endpoint should document:
 
 # Contributing
 
-Contributions are welcome.
+Contributions and improvements are welcome.
 
 Before submitting changes:
 
-1. Follow the existing coding conventions.
-2. Test the REST API.
-3. Test database changes.
-4. Test authentication.
-5. Test checkout.
-6. Test payment integrations.
-7. Test shipping calculations.
-8. Ensure existing functionality is not broken.
+1. Follow the existing coding standards.
+2. Test REST API endpoints.
+3. Test authentication.
+4. Test checkout.
+5. Test payment integrations.
+6. Test shipping calculations.
+7. Test database operations.
+8. Verify that existing functionality is not affected.
 
 ---
 
@@ -1000,47 +505,37 @@ ComboStore Server is distributed according to the license specified by the proje
 For ComboStore development and technical support, please contact the ComboStore development team.
 
 **ComboStore**
-Modern headless eCommerce powered by WordPress and Next.js.
+Modern eCommerce powered by WordPress and Next.js.
 
 ---
 
-## Related Projects
+# Related Projects
 
-### ComboStore Frontend
+ComboStore Server is designed to work with the **ComboStore Next.js frontend**.
 
-The Next.js frontend communicates with this WordPress plugin through the REST API.
-
-```text
-Next.js → ComboStore Server → WordPress → Database
-```
-
-### Recommended Production Setup
+The general communication flow is:
 
 ```text
-Frontend
-Next.js + Vercel
-
-Backend
-WordPress + ComboStore Server
-
-Database
-MySQL / MariaDB
-
-Communication
-HTTPS + REST API
-
-Authentication
-Secure server-side authentication
-
-Payments
-Backend payment gateway integrations
+Next.js Frontend
+       │
+       │ REST API
+       ▼
+WordPress
+       │
+       └── ComboStore Server
 ```
+
+Recommended WordPress plugins:
+
+* **ComboStore Server** — Core ComboStore backend functionality
+* **Enable CORS** — Cross-origin REST API requests
+* **JWT Authentication for WP REST API** — JWT-based API authentication
 
 ---
 
-## Project Status
+# Project Status
 
-ComboStore Server is actively developed and may evolve as new eCommerce features, APIs, integrations, and database modules are introduced.
+ComboStore Server is actively developed and may evolve as new eCommerce features, APIs, integrations, and improvements are introduced.
 
 
 
