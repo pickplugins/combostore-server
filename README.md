@@ -20,6 +20,189 @@ The plugin is designed to work with a Next.js frontend, typically deployed on Ve
 
 The plugin extends WordPress with the REST APIs and backend functionality required by the ComboStore frontend, including checkout, orders, payments, shipping, customers, and other eCommerce services.
 
+
+
+
+
+# ComboStore Projects
+
+ComboStore consists of three separate projects that work together to provide the complete eCommerce platform.
+
+## 1. ComboStore Server
+
+**ComboStore Server** is the WordPress backend/plugin.
+
+It provides:
+
+* WordPress REST API
+* eCommerce backend functionality
+* Product and category APIs
+* Cart and checkout APIs
+* Order management
+* Customer management
+* Shipping functionality
+* Payment gateway integrations
+* Authentication
+* Database functionality
+* Other backend services required by ComboStore
+
+This project is installed as a WordPress plugin.
+
+---
+
+## 2. ComboStore Dashboard
+
+**ComboStore Dashboard** is the administration application used to manage the store.
+
+Repository:
+
+[ComboStore Dashboard — GitHub](https://github.com/pickplugins/combostore-dashboard?utm_source=chatgpt.com)
+
+The dashboard communicates with the ComboStore Server through REST APIs.
+
+It is used for managing the store, including:
+
+* Products
+* Categories
+* Orders
+* Customers
+* Shipping
+* Payments
+* Store settings
+* Reports and analytics
+* Other administrative functionality
+
+---
+
+## 3. ComboStore Storefront
+
+**ComboStore Storefront** is the customer-facing eCommerce application.
+
+Repository:
+
+[ComboStore Storefront — GitHub](https://github.com/pickplugins/combostore-storefront?utm_source=chatgpt.com)
+
+The storefront provides the shopping experience for customers, including:
+
+* Product browsing
+* Product details
+* Categories
+* Shopping cart
+* Checkout
+* Customer account
+* Order placement
+* Payment
+* Shipping selection
+* Other customer-facing functionality
+
+---
+
+# ComboStore Project Structure
+
+The three projects work together as follows:
+
+```text
+                         ComboStore
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+       WordPress Server   Dashboard     Storefront
+              │              │              │
+              │              │              │
+              │              └──────┐ ┌─────┘
+              │                     │ │
+              └─────────────────────┴─┘
+                         REST API
+```
+
+A typical production setup can be:
+
+```text
+┌───────────────────────────────────────────────────────────┐
+│                         Customers                         │
+└─────────────────────────────┬─────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────┐
+│                  ComboStore Storefront                    │
+│                     Next.js App                           │
+│                                                           │
+│             Customer-facing eCommerce                     │
+└─────────────────────────────┬─────────────────────────────┘
+                              │
+                              │ REST API
+                              ▼
+┌───────────────────────────────────────────────────────────┐
+│                  ComboStore Server                        │
+│                                                           │
+│              WordPress + Plugin                           │
+│                                                           │
+│       API • Database • Orders • Payments • Shipping       │
+└─────────────────────────────┬─────────────────────────────┘
+                              │
+                              │ REST API
+                              ▼
+┌───────────────────────────────────────────────────────────┐
+│                  ComboStore Dashboard                     │
+│                     Next.js App                            │
+│                                                           │
+│                Store Administration                       │
+└───────────────────────────────────────────────────────────┘
+```
+
+## Recommended Deployment
+
+A typical deployment may use separate domains or subdomains:
+
+```text
+Storefront:
+https://store.example.com
+
+Dashboard:
+https://dashboard.example.com
+
+Server:
+https://server.example.com
+```
+
+The three applications communicate through HTTPS REST APIs.
+
+### Example
+
+```text
+Customer
+   │
+   ▼
+store.example.com
+   │
+   │ REST API
+   ▼
+server.example.com
+   │
+   │
+   └── WordPress + ComboStore Server
+
+
+Store Manager
+   │
+   ▼
+dashboard.example.com
+   │
+   │ REST API
+   ▼
+server.example.com
+```
+
+The **ComboStore Server** plugin is therefore the central backend component that connects the **Storefront** and **Dashboard** applications with WordPress and the store's data.
+
+
+
+
+
+
+
+
 ---
 
 # Requirements
