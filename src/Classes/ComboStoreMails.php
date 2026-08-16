@@ -87,9 +87,9 @@ class ComboStoreMails
 
         $templates_data = array(
             'user_registered' => array(
-                'name' => __('New User Registration', 'combo-store-server'),
-                'description' => __('Notification email for admin when a new user is registered.', 'combo-store-server'),
-                'subject' => __('New user submitted - {site_url}', 'combo-store-server'),
+                'name' => __('New User Registration', 'combostore-server'),
+                'description' => __('Notification email for admin when a new user is registered.', 'combostore-server'),
+                'subject' => __('New user submitted - {site_url}', 'combostore-server'),
                 'html' => $templates_data_html['user_registered'],
                 'email_to' => get_option('admin_email'),
                 'email_from' => get_option('admin_email'),
@@ -110,17 +110,17 @@ class ComboStoreMails
     {
 
         $parameters['user_registered'] = array(
-            '{site_name}' => __('Website title', 'combo-store-server'),
-            '{site_description}' => __('Website tagline', 'combo-store-server'),
-            '{site_url}' => __('Website URL', 'combo-store-server'),
-            '{site_logo_url}' => __('Website logo URL', 'combo-store-server'),
-            '{user_name}' => __('Username', 'combo-store-server'),
-            '{user_display_name}' => __('User display name', 'combo-store-server'),
-            '{first_name}' => __('User first name', 'combo-store-server'),
-            '{last_name}' => __('User last name', 'combo-store-server'),
-            '{user_avatar}' => __('User avatar', 'combo-store-server'),
-            '{user_email}' => __('User email address', 'combo-store-server'),
-            '{ac_activaton_url}' => __('Account activation URL', 'combo-store-server'),
+            '{site_name}' => __('Website title', 'combostore-server'),
+            '{site_description}' => __('Website tagline', 'combostore-server'),
+            '{site_url}' => __('Website URL', 'combostore-server'),
+            '{site_logo_url}' => __('Website logo URL', 'combostore-server'),
+            '{user_name}' => __('Username', 'combostore-server'),
+            '{user_display_name}' => __('User display name', 'combostore-server'),
+            '{first_name}' => __('User first name', 'combostore-server'),
+            '{last_name}' => __('User last name', 'combostore-server'),
+            '{user_avatar}' => __('User avatar', 'combostore-server'),
+            '{user_email}' => __('User email address', 'combostore-server'),
+            '{ac_activaton_url}' => __('Account activation URL', 'combostore-server'),
         );
 
 

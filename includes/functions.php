@@ -97,6 +97,67 @@ function combo_store_upload_file($data)
   return $jsonReturn;
 }
 
+
+
+
+
+function upload_media_file($data)
+{
+  $upload_dir       = wp_upload_dir();
+
+  error_log("Uploading file: " . print_r($data, true));
+  //HANDLE UPLOADED FILE
+  if (!function_exists('wp_handle_sideload')) {
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+  }
+  // Without that I'm getting a debug error!?
+  if (!function_exists('wp_get_current_user')) {
+    require_once(ABSPATH . 'wp-includes/pluggable.php');
+  }
+  if (empty($data['tmp_name'])) return;
+  // @new
+  $file             = array();
+  $file['error']    = isset($data['error']) ? $data['error'] : '';
+  $file['tmp_name'] = isset($data['tmp_name']) ? $data['tmp_name'] : "";
+  $file['name']     = isset($data['name']) ? $data['name'] : '';
+  $file['type']     = isset($data['type']) ? $data['type'] : '';
+  $file['size']     = isset($data['tmp_name']) ? filesize($data['tmp_name']) : 0;
+  // upload file to server
+  // @new use $file instead of $image_upload
+  $file_return      = wp_handle_sideload($file, array('test_form' => false));
+  $filename = $file_return['file'];
+  $attachment = array(
+    'post_mime_type' => $file_return['type'],
+    'post_title' => preg_replace('/\.[^.]+$/', '', basename($filename)),
+    'post_content' => '',
+    'post_status' => 'inherit',
+    'guid' => esc_url($upload_dir['url']) . '/' . basename($filename)
+  );
+  $attach_id = wp_insert_attachment($attachment, $filename, 289);
+  require_once(ABSPATH . 'wp-admin/includes/image.php');
+  $attach_data = wp_generate_attachment_metadata($attach_id, $filename);
+  wp_update_attachment_metadata($attach_id, $attach_data);
+  $attach_url = wp_get_attachment_url($attach_id);
+
+  error_log(wp_json_encode($attach_data));
+
+  $jsonReturn = array(
+    'id'  =>  $attach_id,
+    'url'  =>  $attach_url,
+    'title'  =>  $data['name'],
+  );
+  return $jsonReturn;
+}
+
+
+
+
+
+
+
+
+
+
 function build_category_tree($terms, $parent = 0)
 {
   $branch = [];

@@ -19,6 +19,7 @@ class ComboStoreRegister
     function create_user($args)
     {
 
+        error_log(wp_json_encode($args));
 
         $password = !empty($args['password']) ? $args['password'] : $this->generate_password();
         $role = isset($args['role']) ? $args['role'] : '';
@@ -81,7 +82,7 @@ class ComboStoreRegister
         $user_id = wp_create_user($credentials['username'], $credentials['password'], $credentials['email']);
 
         if (!empty($mobile)) {
-            update_user_meta($user_id, "mobile", $mobile);
+            update_user_meta($user_id, "phone", $mobile);
         }
 
         $user = new WP_User($user_id);

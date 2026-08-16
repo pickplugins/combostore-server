@@ -38,7 +38,7 @@ class ComboStoreVote
         if (!$userid) {
 
             $response['errors'] = true;
-            $response['message'] = __("User id missing.", 'combo-store-server');
+            $response['message'] = __("User id missing.", 'combostore-server');
             return $response;
         }
 
@@ -47,7 +47,7 @@ class ComboStoreVote
         if ($daily_limit >= 10) {
 
             $response['errors'] = true;
-            $response['message'] = __("Daily vote limit reached.", 'combo-store-server');
+            $response['message'] = __("Daily vote limit reached.", 'combostore-server');
             return $response;
         }
 

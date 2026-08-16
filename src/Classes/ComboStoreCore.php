@@ -46,22 +46,22 @@ class ComboStoreCore
 
         $schedules['1minute'] = array(
             'interval'  => 60,
-            'display'   => __('1 Minute', 'combo-store-server')
+            'display'   => __('1 Minute', 'combostore-server')
         );
 
         $schedules['10minute'] = array(
             'interval'  => 600,
-            'display'   => __('1 Minute', 'combo-store-server')
+            'display'   => __('1 Minute', 'combostore-server')
         );
 
         $schedules['30minute'] = array(
             'interval'  => 1800,
-            'display'   => __('30 Minute', 'combo-store-server')
+            'display'   => __('30 Minute', 'combostore-server')
         );
 
         $schedules['6hours'] = array(
             'interval'  => 21600,
-            'display'   => __('6 hours', 'combo-store-server')
+            'display'   => __('6 hours', 'combostore-server')
         );
 
 

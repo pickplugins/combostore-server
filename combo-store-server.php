@@ -5,7 +5,7 @@ Plugin URI: http://pickplugins.com/items/woocommerce-product-slider-for-wordpres
 Description: combo-store
 Version: 1.0.6
 Author: PickPlugins
-Text Domain: combo-store-server
+Text Domain: combostore-server
 Author URI: http://pickplugins.com
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -63,6 +63,7 @@ register_deactivation_hook(__FILE__, 'combo_store_deactivation');
 
 
 require_once(combo_store_plugin_dir . 'includes/functions.php');
+// require_once(combo_store_plugin_dir . 'includes/functions-crons.php');
 require_once(combo_store_plugin_dir . 'includes/functions-courier.php');
 require_once(combo_store_plugin_dir . 'includes/functions-mails.php');
 require_once(combo_store_plugin_dir . 'includes/functions-shortcodes.php');
@@ -79,7 +80,7 @@ add_action('init', function () {
 
     new GithubPluginUpdater(
         combo_store_plugin_file,
-        'pickplugins/combo-store-server', // CHANGE THIS
+        'pickplugins/combostore-server', // CHANGE THIS
         combo_store_plugin_version,
         '' // optional GitHub token 1
     );
@@ -92,6 +93,10 @@ function combo_store_activation()
 {
 
 
+    // if (!wp_next_scheduled('cstore_process_scheduled_orders')) {
+    //     wp_schedule_event(time(), '10minute', 'cstore_process_scheduled_orders');
+    // }
+
     // if (!wp_next_scheduled('run_check_tasks_status')) {
     //     wp_schedule_event(time(), '10minute', 'run_check_tasks_status');
     // }
@@ -103,19 +108,22 @@ function combo_store_activation()
     //     wp_schedule_event(time(), 'daily', 'run_combo_store_add_daily_credit');
     // }
 
-    if (!wp_next_scheduled('run_update_product_description')) {
-        wp_schedule_event(time(), '30minute', 'run_update_product_description');
+    if (!wp_next_scheduled('cstore_process_scheduled_orders')) {
+        wp_schedule_event(time(), 'hourly', 'cstore_process_scheduled_orders');
     }
-    if (!wp_next_scheduled('run_update_blog_description')) {
-        wp_schedule_event(time(), '15minute', 'run_update_blog_description');
-    }
-    if (!wp_next_scheduled('run_update_blog_slug')) {
-        wp_schedule_event(time(), '15minute', 'run_update_blog_slug');
-    }
+    // if (!wp_next_scheduled('run_update_product_description')) {
+    //     wp_schedule_event(time(), '30minute', 'run_update_product_description');
+    // }
+    // if (!wp_next_scheduled('run_update_blog_description')) {
+    //     wp_schedule_event(time(), '15minute', 'run_update_blog_description');
+    // }
+    // if (!wp_next_scheduled('run_update_blog_slug')) {
+    //     wp_schedule_event(time(), '15minute', 'run_update_blog_slug');
+    // }
 
-    if (!wp_next_scheduled('run_total_counts')) {
-        wp_schedule_event(time(), 'daily', 'run_total_counts');
-    }
+    // if (!wp_next_scheduled('run_total_counts')) {
+    //     wp_schedule_event(time(), 'daily', 'run_total_counts');
+    // }
 
 
 
@@ -132,6 +140,7 @@ function combo_store_deactivation()
     // wp_clear_scheduled_hook('run_check_tasks_status');
     // wp_clear_scheduled_hook('run_combo_store_task');
     // wp_clear_scheduled_hook('run_combo_store_add_daily_credit');
+    wp_clear_scheduled_hook('cstore_process_scheduled_orders');
     wp_clear_scheduled_hook('run_update_product_description');
     wp_clear_scheduled_hook('run_update_blog_description');
     wp_clear_scheduled_hook('run_update_blog_slug');
@@ -174,22 +183,22 @@ function combo_store_cron_schedules($schedules)
 
     $schedules['3minute'] = array(
         'interval'  => 180,
-        'display'   => __('3 Minute', 'combo-store-server')
+        'display'   => __('3 Minute', 'combostore-server')
     );
 
     $schedules['5minute'] = array(
         'interval'  => 300,
-        'display'   => __('5 Minute', 'combo-store-server')
+        'display'   => __('5 Minute', 'combostore-server')
     );
 
     $schedules['15minute'] = array(
         'interval'  => 900,
-        'display'   => __('15 Minute', 'combo-store-server')
+        'display'   => __('15 Minute', 'combostore-server')
     );
 
     $schedules['30minute'] = array(
         'interval'  => 1800,
-        'display'   => __('30 Minute', 'combo-store-server')
+        'display'   => __('30 Minute', 'combostore-server')
     );
 
 

@@ -61,6 +61,12 @@ class ComboStoreDatabase
 
         $table_source_links = $prefix . 'cstore_source_links';
 
+        $table_shipping_zones = $prefix . 'cstore_shipping_zones';
+        $table_shipping_methods = $prefix . 'cstore_shipping_methods';
+        $table_shipping_rates = $prefix . 'cstore_shipping_rates';
+        $table_shipping_carriers = $prefix . 'cstore_shipping_carriers';
+        $table_shipping_rules = $prefix . 'cstore_shipping_rules';
+
 
 
 
@@ -239,6 +245,7 @@ class ComboStoreDatabase
     tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     shipping_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     advance_payment DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    trade_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     gross_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     net_profit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     payment_method VARCHAR(50) NOT NULL,
@@ -256,7 +263,8 @@ class ComboStoreDatabase
     shipping_address TEXT NOT NULL,
     shipping_city VARCHAR(150) NOT NULL,
     shipping_country VARCHAR(150) NOT NULL,
-    assign_to JSON DEFAULT NULL,
+    assign_to longtext DEFAULT NULL,
+    scheduled_at DATETIME DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     completed_at DATETIME DEFAULT NULL,
@@ -274,6 +282,8 @@ class ComboStoreDatabase
     trade_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     tax DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    discount_type VARCHAR(100) DEFAULT NULL,
+    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     meta JSON DEFAULT NULL,
     UNIQUE KEY id (id)
@@ -486,13 +496,105 @@ class ComboStoreDatabase
                 ) $charset_collate;";
 
         $sql_licenses_meta = "CREATE TABLE IF NOT EXISTS $table_licenses_meta (
-                    id int(100) NOT NULL AUTO_INCREMENT,
-					object_id	bigint(20)		NOT NULL,
-					meta_key	VARCHAR( 255 )		NOT NULL,
-					meta_value	longtext	NOT NULL,
-                    UNIQUE KEY id (id)
-                ) $charset_collate;";
+            id int(100) NOT NULL AUTO_INCREMENT,
+            object_id	bigint(20)		NOT NULL,
+            meta_key	VARCHAR( 255 )		NOT NULL,
+            meta_value	longtext	NOT NULL,
+            UNIQUE KEY id (id)
+        ) $charset_collate;";
 
+
+
+
+
+        $sql_shipping_zones = "CREATE TABLE IF NOT EXISTS $table_shipping_zones (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL,
+            description TEXT NULL,
+            region VARCHAR(30) NOT NULL,
+            settings LONGTEXT NULL,
+            priority INT NOT NULL DEFAULT 1,
+            status INT NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (id)
+        ) $charset_collate;";
+
+
+
+
+
+        $sql_shipping_methods = "CREATE TABLE IF NOT EXISTS $table_shipping_methods (
+    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    zone_id BIGINT(20) UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    description TEXT NULL,
+    settings LONGTEXT NULL,
+    priority INT NOT NULL DEFAULT 1,
+    status INT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY zone_id (zone_id)
+) $charset_collate;";
+
+
+
+        //         $sql_shipping_rates = "CREATE TABLE IF NOT EXISTS $table_shipping_rates (
+        //     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        //     method_id BIGINT(20) UNSIGNED NOT NULL,
+        //     condition_type VARCHAR(50) NOT NULL,
+        //     condition_min DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        //     condition_max DECIMAL(12,2) NOT NULL DEFAULT 99999999.99,
+        //     shipping_cost DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        //     free_shipping TINYINT(1) NOT NULL DEFAULT 0,
+        //     status TINYINT(1) NOT NULL DEFAULT 1,
+        //     created_at DATETIME NOT NULL,
+        //     PRIMARY KEY (id),
+        //     KEY method_id (method_id),
+        //     KEY condition_type (condition_type),
+        //     KEY status (status)
+        // ) $charset_collate;";
+
+
+
+        //         $sql_shipping_carriers = "CREATE TABLE IF NOT EXISTS $table_shipping_carriers (
+        //     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        //     name VARCHAR(255) NOT NULL,
+        //     slug VARCHAR(100) NOT NULL,
+        //     api_url VARCHAR(255) NULL,
+        //     api_key TEXT NULL,
+        //     api_secret TEXT NULL,
+        //     webhook_secret TEXT NULL,
+        //     tracking_url VARCHAR(255) NULL,
+        //     settings LONGTEXT NULL,
+        //     status TINYINT(1) NOT NULL DEFAULT 1,
+        //     created_at DATETIME NOT NULL,
+        //     updated_at DATETIME NOT NULL,
+        //     PRIMARY KEY (id),
+        //     UNIQUE KEY slug (slug),
+        //     KEY status (status)
+        // ) $charset_collate;";
+
+
+        //         $sql_shipping_rules = "CREATE TABLE IF NOT EXISTS $table_shipping_rules (
+        //     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+        //     method_id BIGINT(20) UNSIGNED NOT NULL,
+        //     rule_type VARCHAR(50) NOT NULL,
+        //     rule_operator VARCHAR(20) NOT NULL,
+        //     rule_value VARCHAR(255) NOT NULL,
+        //     action VARCHAR(50) NOT NULL,
+        //     action_value VARCHAR(255) NULL,
+        //     priority INT(11) NOT NULL DEFAULT 0,
+        //     status TINYINT(1) NOT NULL DEFAULT 1,
+        //     created_at DATETIME NOT NULL,
+        //     PRIMARY KEY (id),
+        //     KEY method_id (method_id),
+        //     KEY rule_type (rule_type),
+        //     KEY status (status)
+        // ) $charset_collate;";
 
 
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -525,13 +627,12 @@ class ComboStoreDatabase
         dbDelta($sql_subscriptions_meta);
 
 
-        // dbDelta($sql_api_rate_limits);
+        dbDelta($sql_shipping_zones);
+        dbDelta($sql_shipping_methods);
 
-        // dbDelta($sql_licenses);
-        // dbDelta($sql_licenses_meta);
-
-        // dbDelta($sql_downloads);
-        // dbDelta($sql_downloads_meta);
+        // dbDelta($sql_shipping_rates);
+        // dbDelta($sql_shipping_carriers);
+        // dbDelta($sql_shipping_rules);
 
         // $combo_store_info = array();
         // $combo_store_info['db_version'] = 0;

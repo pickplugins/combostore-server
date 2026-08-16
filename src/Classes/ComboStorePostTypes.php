@@ -134,8 +134,8 @@ class ComboStorePostTypes
 		if (post_type_exists("coupon"))
 			return;
 
-		$singular  = __('Coupon', 'combo-store-server');
-		$plural    = __('Coupons', 'combo-store-server');
+		$singular  = __('Coupon', 'combostore-server');
+		$plural    = __('Coupons', 'combostore-server');
 
 
 		register_post_type(
@@ -145,33 +145,33 @@ class ComboStorePostTypes
 					'name' 					=> $plural,
 					'singular_name' 		=> $singular,
 					'menu_name'             => $singular,
-/* translators: Post Type name */
-					'all_items'             => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'add_new' 				=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item' 			=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit' 					=> __('Edit', 'combo-store-server'),
-/* translators: Post Type name */
-					'edit_item' 			=> sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item' 				=> sprintf(__('New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view' 					=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view_item' 			=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'search_items' 			=> sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found' 			=> sprintf(__('No %s found', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent' 				=> sprintf(__('Parent %s', 'combo-store-server'), $singular)
+					/* translators: Post Type name */
+					'all_items'             => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'add_new' 				=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item' 			=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit' 					=> __('Edit', 'combostore-server'),
+					/* translators: Post Type name */
+					'edit_item' 			=> sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item' 				=> sprintf(__('New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view' 					=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view_item' 			=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'search_items' 			=> sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found' 			=> sprintf(__('No %s found', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent' 				=> sprintf(__('Parent %s', 'combostore-server'), $singular)
 				),
-/* translators: Post Type name */
-				'description' => sprintf(__('This is where you can create and manage %s.', 'combo-store-server'), $plural),
+				/* translators: Post Type name */
+				'description' => sprintf(__('This is where you can create and manage %s.', 'combostore-server'), $plural),
 				'public' 				=> true,
 				'show_ui' 				=> true,
 				'capability_type' 		=> 'post',
@@ -193,8 +193,8 @@ class ComboStorePostTypes
 		if (post_type_exists("wishlist"))
 			return;
 
-		$singular  = __('wishlist', 'combo-store-server');
-		$plural    = __('wishlists', 'combo-store-server');
+		$singular  = __('wishlist', 'combostore-server');
+		$plural    = __('wishlists', 'combostore-server');
 
 
 		register_post_type(
@@ -204,33 +204,33 @@ class ComboStorePostTypes
 					'name' 					=> $plural,
 					'singular_name' 		=> $singular,
 					'menu_name'             => $singular,
-/* translators: Post Type name */
-					'all_items'             => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'add_new' 				=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item' 			=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit' 					=> __('Edit', 'combo-store-server'),
-/* translators: Post Type name */
-					'edit_item' 			=> sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item' 				=> sprintf(__('New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view' 					=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view_item' 			=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'search_items' 			=> sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found' 			=> sprintf(__('No %s found', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent' 				=> sprintf(__('Parent %s', 'combo-store-server'), $singular)
+					/* translators: Post Type name */
+					'all_items'             => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'add_new' 				=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item' 			=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit' 					=> __('Edit', 'combostore-server'),
+					/* translators: Post Type name */
+					'edit_item' 			=> sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item' 				=> sprintf(__('New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view' 					=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view_item' 			=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'search_items' 			=> sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found' 			=> sprintf(__('No %s found', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent' 				=> sprintf(__('Parent %s', 'combostore-server'), $singular)
 				),
-/* translators: Post Type name */
-				'description' => sprintf(__('This is where you can create and manage %s.', 'combo-store-server'), $plural),
+				/* translators: Post Type name */
+				'description' => sprintf(__('This is where you can create and manage %s.', 'combostore-server'), $plural),
 				'public' 				=> true,
 				'show_ui' 				=> true,
 				'capability_type' 		=> 'post',
@@ -262,8 +262,8 @@ class ComboStorePostTypes
 		if (post_type_exists("product"))
 			return;
 
-		$singular  = __('Product', 'combo-store-server');
-		$plural    = __('Products', 'combo-store-server');
+		$singular  = __('Product', 'combostore-server');
+		$plural    = __('Products', 'combostore-server');
 
 
 		register_post_type(
@@ -273,33 +273,33 @@ class ComboStorePostTypes
 					'name' 					=> $plural,
 					'singular_name' 		=> $singular,
 					'menu_name'             => $singular,
-/* translators: Post Type name */
-					'all_items'             => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'add_new' 				=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item' 			=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit' 					=> __('Edit', 'combo-store-server'),
-/* translators: Post Type name */
-					'edit_item' 			=> sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item' 				=> sprintf(__('New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view' 					=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view_item' 			=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'search_items' 			=> sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found' 			=> sprintf(__('No %s found', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent' 				=> sprintf(__('Parent %s', 'combo-store-server'), $singular)
+					/* translators: Post Type name */
+					'all_items'             => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'add_new' 				=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item' 			=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit' 					=> __('Edit', 'combostore-server'),
+					/* translators: Post Type name */
+					'edit_item' 			=> sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item' 				=> sprintf(__('New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view' 					=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view_item' 			=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'search_items' 			=> sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found' 			=> sprintf(__('No %s found', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent' 				=> sprintf(__('Parent %s', 'combostore-server'), $singular)
 				),
-/* translators: Post Type name */
-				'description' => sprintf(__('This is where you can create and manage %s.', 'combo-store-server'), $plural),
+				/* translators: Post Type name */
+				'description' => sprintf(__('This is where you can create and manage %s.', 'combostore-server'), $plural),
 				'public' 				=> true,
 				'show_ui' 				=> true,
 				'capability_type' 		=> 'post',
@@ -326,8 +326,8 @@ class ComboStorePostTypes
 	public function register_product_cat()
 	{
 
-		$singular  = __('Product Category', 'combo-store-server');
-		$plural    = __('Product Categories', 'combo-store-server');
+		$singular  = __('Product Category', 'combostore-server');
+		$plural    = __('Product Categories', 'combostore-server');
 
 		register_taxonomy(
 			"product_cat",
@@ -341,22 +341,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
@@ -375,8 +375,8 @@ class ComboStorePostTypes
 	public function register_product_tag()
 	{
 
-		$singular  = __('Product Tag', 'combo-store-server');
-		$plural    = __('Product Tags', 'combo-store-server');
+		$singular  = __('Product Tag', 'combostore-server');
+		$plural    = __('Product Tags', 'combostore-server');
 
 		register_taxonomy(
 			"product_tag",
@@ -390,22 +390,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
@@ -420,8 +420,8 @@ class ComboStorePostTypes
 	public function register_product_brand()
 	{
 
-		$singular  = __('Product brand', 'combo-store-server');
-		$plural    = __('Product brands', 'combo-store-server');
+		$singular  = __('Product brand', 'combostore-server');
+		$plural    = __('Product brands', 'combostore-server');
 
 		register_taxonomy(
 			"product_brand",
@@ -435,22 +435,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
@@ -465,8 +465,8 @@ class ComboStorePostTypes
 	public function register_product_visibility()
 	{
 
-		$singular  = __('Product visibility', 'combo-store-server');
-		$plural    = __('Product visibility', 'combo-store-server');
+		$singular  = __('Product visibility', 'combostore-server');
+		$plural    = __('Product visibility', 'combostore-server');
 
 		register_taxonomy(
 			"product_visibility",
@@ -480,22 +480,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
@@ -517,8 +517,8 @@ class ComboStorePostTypes
 		if (post_type_exists("ticket"))
 			return;
 
-		$singular  = __('Ticket', 'combo-store-server');
-		$plural    = __('Tickets', 'combo-store-server');
+		$singular  = __('Ticket', 'combostore-server');
+		$plural    = __('Tickets', 'combostore-server');
 
 
 		register_post_type(
@@ -528,33 +528,33 @@ class ComboStorePostTypes
 					'name' 					=> $plural,
 					'singular_name' 		=> $singular,
 					'menu_name'             => $singular,
-/* translators: Post Type name */
-					'all_items'             => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'add_new' 				=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item' 			=> sprintf(__('Add %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit' 					=> __('Edit', 'combo-store-server'),
-/* translators: Post Type name */
-					'edit_item' 			=> sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item' 				=> sprintf(__('New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view' 					=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'view_item' 			=> sprintf(__('View %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'search_items' 			=> sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found' 			=> sprintf(__('No %s found', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent' 				=> sprintf(__('Parent %s', 'combo-store-server'), $singular)
+					/* translators: Post Type name */
+					'all_items'             => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'add_new' 				=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item' 			=> sprintf(__('Add %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit' 					=> __('Edit', 'combostore-server'),
+					/* translators: Post Type name */
+					'edit_item' 			=> sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item' 				=> sprintf(__('New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view' 					=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'view_item' 			=> sprintf(__('View %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'search_items' 			=> sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found' 			=> sprintf(__('No %s found', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'not_found_in_trash' 	=> sprintf(__('No %s found in trash', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent' 				=> sprintf(__('Parent %s', 'combostore-server'), $singular)
 				),
-/* translators: Post Type name */
-				'description' => sprintf(__('This is where you can create and manage %s.', 'combo-store-server'), $plural),
+				/* translators: Post Type name */
+				'description' => sprintf(__('This is where you can create and manage %s.', 'combostore-server'), $plural),
 				'public' 				=> true,
 				'show_ui' 				=> true,
 				'capability_type' 		=> 'post',
@@ -581,8 +581,8 @@ class ComboStorePostTypes
 	public function register_ticket_cat()
 	{
 
-		$singular  = __('Ticket Category', 'combo-store-server');
-		$plural    = __('Ticket Categories', 'combo-store-server');
+		$singular  = __('Ticket Category', 'combostore-server');
+		$plural    = __('Ticket Categories', 'combostore-server');
 
 		register_taxonomy(
 			"ticket_cat",
@@ -596,22 +596,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),	
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
@@ -630,8 +630,8 @@ class ComboStorePostTypes
 	public function register_ticket_tag()
 	{
 
-		$singular  = __('Ticket Tag', 'combo-store-server');
-		$plural    = __('Ticket Tags', 'combo-store-server');
+		$singular  = __('Ticket Tag', 'combostore-server');
+		$plural    = __('Ticket Tags', 'combostore-server');
 
 		register_taxonomy(
 			"ticket_tag",
@@ -645,22 +645,22 @@ class ComboStorePostTypes
 					'name'              => $plural,
 					'singular_name'     => $singular,
 					'menu_name'         => ucwords($plural),
-/* translators: Post Type name */
-					'search_items'      => sprintf(__('Search %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'all_items'         => sprintf(__('All %s', 'combo-store-server'), $plural),
-/* translators: Post Type name */
-					'parent_item'       => sprintf(__('Parent %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'parent_item_colon' => sprintf(__('Parent %s:', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'edit_item'         => sprintf(__('Edit %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'update_item'       => sprintf(__('Update %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'add_new_item'      => sprintf(__('Add New %s', 'combo-store-server'), $singular),
-/* translators: Post Type name */
-					'new_item_name'     => sprintf(__('New %s Name', 'combo-store-server'),  $singular)
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
 				),
 				'show_ui' 				=> true,
 				'public' 	     		=> true,
