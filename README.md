@@ -403,6 +403,7 @@ ComboStore Server can integrate with payment gateways through backend APIs.
 
 Supported or planned integrations may include:
 
+* PayPal (implemented - see below)
 * bKash
 * Nagad
 * AamarPay
@@ -433,6 +434,90 @@ Update Order
 ```
 
 Payment verification should always be performed server-side.
+
+---
+
+## PayPal
+
+PayPal Orders v2, implemented in `src/Classes/ComboStorePayPal.php` with its
+routes in `ComboStoreRest`. The amount is always derived from the order row on
+the server, and which order a payment belongs to is read from PayPal's response
+rather than from the request.
+
+### Currency
+
+**PayPal does not accept BDT.** The gateway therefore charges in a supported
+currency (USD by default) and converts the order total with the
+`exchange_rate` setting, which is *how many store-currency units make one
+PayPal-currency unit* — for example `122.5` for BDT per USD. A 640 BDT order
+then charges 5.23 USD. The rate used is written to the order's meta and into an
+order note, so a payment stays reconcilable after the rate moves. If the order
+currency already matches the PayPal currency, no conversion happens and no rate
+is needed.
+
+Conversion rounds up to the smallest unit, so a charge is never short of the
+order. Zero-decimal currencies (HUF, JPY, TWD) are sent as whole units.
+
+### Setup
+
+1. In the PayPal developer dashboard create a REST app and copy its **client
+   id** and **secret** (sandbox first).
+2. Save them through `paypal_update_settings` with `mode`, `currency` and
+   `exchange_rate`, then confirm with `paypal_test_connection`.
+3. Add a webhook in PayPal pointing at
+   `https://<site>/wp-json/combo-store/v2/paypal_webhook`, subscribed to
+   `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`,
+   `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED` and
+   `PAYMENT.CAPTURE.REVERSED`. Copy the **webhook id** PayPal gives you into
+   `webhook_id` — without it webhooks are refused, because an unverifiable
+   webhook cannot be told apart from a forged one.
+4. Set `enabled` to true.
+
+Credentials are kept in their own `combo_store_paypal` option, **not** in
+`combo_store_settings`, because `get_settings_public` hands that blob out whole
+to any caller holding the storefront API key. The secret is never returned by
+any route; `paypal_get_settings` reports only whether one is stored.
+
+### Routes
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `paypal_config` | open | What the browser may know: enabled, mode, client id, currency, SDK URL |
+| `paypal_create_order` | open | `{ order_hash }` → starts a PayPal order for an existing order |
+| `paypal_capture_order` | open | `{ paypal_order_id, order_hash? }` → captures and marks the order paid |
+| `paypal_webhook` | signature | PayPal's events; verified through PayPal, returns real status codes so failures are retried |
+| `paypal_get_settings` | JWT | Settings, secret masked |
+| `paypal_update_settings` | JWT | Save settings; omit `client_secret` to keep the stored one |
+| `paypal_test_connection` | JWT | Prove the credentials authenticate |
+| `paypal_refund` | JWT | `{ order_id, amount?, reason? }` → refund a capture |
+
+The three open routes are open the way `create_order` is, because checkout runs
+for guests. None of them accepts an amount, and the order hash is the only
+handle a buyer holds — the same trust model as `get_order_by_hash`.
+
+### Checkout flow
+
+```text
+create_order                     → order row exists (pending / unpaid)
+paypal_create_order              → { paypal_order_id, approve_url, amount }
+buyer approves (SDK or redirect)
+paypal_capture_order             → order marked paid, note added, order_paid fired
+paypal_webhook                   → the same, if the browser never came back
+```
+
+With the PayPal JS SDK, point `createOrder` at `paypal_create_order` and
+`onApprove` at `paypal_capture_order`. For the redirect flow, send the buyer to
+`approve_url` and call `paypal_capture_order` with the `token` query parameter
+PayPal returns on. Capturing twice is safe: a payment already recorded answers
+success instead of paying again.
+
+When a capture does not match what the order is worth, the order is marked
+`partial` rather than `paid` and the note says not to fulfil before checking —
+it never silently passes as paid.
+
+`combo_store_order_paid` fires on a successful capture. Nothing is hooked to it
+yet; it is where a payment-received email belongs, and it is deliberately not
+`combo_store_order_updated`, whose handler expects a full checkout payload.
 
 ---
 

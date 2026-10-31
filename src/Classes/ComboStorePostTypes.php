@@ -17,6 +17,7 @@ class ComboStorePostTypes
 		add_action('init', array($this, 'post_type_product'), 0);
 		add_action('init', array($this, 'register_product_cat'), 0);
 		add_action('init', array($this, 'register_product_tag'), 0);
+		add_action('init', array($this, 'register_product_badge'), 0);
 		add_action('init', array($this, 'register_product_brand'), 0);
 		add_action('init', array($this, 'register_product_visibility'), 0);
 
@@ -31,28 +32,30 @@ class ComboStorePostTypes
 		$combo_store_settings = get_option('combo_store_settings');
 		$productAttributes = isset($combo_store_settings['productAttributes']) ? $combo_store_settings['productAttributes'] : [];
 
+		// error_log(wp_json_encode($productAttributes));
+
 
 		if (empty($productAttributes)) return;
 		foreach ($productAttributes as $productAttribute) {
 			$slug = isset($productAttribute['slug']) ? $productAttribute['slug'] : '';
 			if (empty($slug)) continue;
 			if (taxonomy_exists($slug)) continue;
-			$plural = isset($productAttribute['labels']['name']) ? $productAttribute['labels']['name'] : '';
-			$singular_name = isset($productAttribute['labels']['singular_name']) ? $productAttribute['labels']['singular_name'] : $plural;
-			$menu_name = isset($productAttribute['labels']['menu_name']) ? $productAttribute['labels']['menu_name'] : $plural;
-			$add_new = isset($productAttribute['labels']['add_new']) ? $productAttribute['labels']['add_new'] : "Add New";
-			$all_items = isset($productAttribute['labels']['all_items']) ? $productAttribute['labels']['all_items'] : "All %s";
-			$add_new_item = isset($productAttribute['labels']['add_new_item']) ? $productAttribute['labels']['add_new_item'] : "Add %s";
-			$edit = isset($productAttribute['labels']['edit']) ? $productAttribute['labels']['edit'] : "Edit";
-			$edit_item = isset($productAttribute['labels']['edit_item']) ? $productAttribute['labels']['edit_item'] : "Edit %s";
-			$new_item = isset($productAttribute['labels']['new_item']) ? $productAttribute['labels']['new_item'] : "New %s";
-			$view = isset($productAttribute['labels']['view']) ? $productAttribute['labels']['view'] : "View %s";
-			$view_item = isset($productAttribute['labels']['view_item']) ? $productAttribute['labels']['view_item'] : "View %s";
-			$search_items = isset($productAttribute['labels']['search_items']) ? $productAttribute['labels']['search_items'] : "Search %s";
-			$not_found = isset($productAttribute['labels']['not_found']) ? $productAttribute['labels']['not_found'] : "No %s found";
-			$not_found_in_trash = isset($productAttribute['labels']['not_found_in_trash']) ? $productAttribute['labels']['not_found_in_trash'] : "No %s found in trash";
-			$parent = isset($productAttribute['labels']['parent']) ? $productAttribute['labels']['parent'] : "Parent %s";
-			$description = isset($productAttribute['description']) ? $productAttribute['description'] : "This is where you can create and manage %s.";
+			$plural = isset($productAttribute['label']) ? $productAttribute['label'] : '';
+			$singular_name = isset($productAttribute['singular_name']) ? $productAttribute['singular_name'] : $plural;
+			$menu_name = isset($productAttribute['menu_name']) ? $productAttribute['menu_name'] : $plural;
+			$add_new = isset($productAttribute['add_new']) ? $productAttribute['add_new'] : "Add New";
+			$all_items = isset($productAttribute['all_items']) ? $productAttribute['all_items'] : sprintf("All %s", $plural);
+			$add_new_item = isset($productAttribute['add_new_item']) ? $productAttribute['add_new_item'] : sprintf("Add New %s", $singular_name);
+			$edit = isset($productAttribute['edit']) ? $productAttribute['edit'] : "Edit";
+			$edit_item = isset($productAttribute['edit_item']) ? $productAttribute['edit_item'] : sprintf("Edit %s", $singular_name);
+			$new_item = isset($productAttribute['new_item']) ? $productAttribute['new_item'] : sprintf("New %s", $singular_name);
+			$view = isset($productAttribute['view']) ? $productAttribute['view'] : sprintf("View %s", $singular_name);
+			$view_item = isset($productAttribute['view_item']) ? $productAttribute['view_item'] : sprintf("View %s", $singular_name);
+			$search_items = isset($productAttribute['search_items']) ? $productAttribute['search_items'] : sprintf("Search %s", $plural);
+			$not_found = isset($productAttribute['not_found']) ? $productAttribute['not_found'] : sprintf("No %s found", $plural);
+			$not_found_in_trash = isset($productAttribute['not_found_in_trash']) ? $productAttribute['not_found_in_trash'] : sprintf("No %s found in trash", $plural);
+			$parent = isset($productAttribute['parent']) ? $productAttribute['parent'] : sprintf("Parent %s", $singular_name);
+			$description = isset($productAttribute['description']) ? $productAttribute['description'] : sprintf("This is where you can create and manage %s.", $plural);
 			$object_types = ["product"];
 
 			$public = isset($productAttribute['public']) ? $productAttribute['public'] : true;
@@ -309,7 +312,7 @@ class ComboStorePostTypes
 				'hierarchical' 			=> false,
 				'rewrite' 				=> true,
 				'query_var' 			=> true,
-				'supports' 				=> array('title', 'editor', 'thumbnail', 'custom-fields', 'author', 'excerpt'),
+				'supports' 				=> array('title', 'editor', 'thumbnail', 'custom-fields', 'author', 'excerpt', 'comments'),
 				'show_in_nav_menus' 	=> false,
 				'menu_icon' => 'dashicons-megaphone',
 			))
@@ -417,6 +420,53 @@ class ComboStorePostTypes
 			))
 		);
 	}
+	public function register_product_badge()
+	{
+
+		$singular  = __('Product Badge', 'combostore-server');
+		$plural    = __('Product Badges', 'combostore-server');
+
+		register_taxonomy(
+			"product_badge",
+			apply_filters('cstore_product_badge_object_type', array('product')),
+			apply_filters('cstore_product_badge_args', array(
+				'hierarchical' 			=> false,
+				'show_admin_column' 	=> true,
+				'update_count_callback' => '_update_post_term_count',
+				'label' 				=> $plural,
+				'labels' => array(
+					'name'              => $plural,
+					'singular_name'     => $singular,
+					'menu_name'         => ucwords($plural),
+					/* translators: Post Type name */
+					'search_items'      => sprintf(__('Search %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'all_items'         => sprintf(__('All %s', 'combostore-server'), $plural),
+					/* translators: Post Type name */
+					'parent_item'       => sprintf(__('Parent %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'parent_item_colon' => sprintf(__('Parent %s:', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'edit_item'         => sprintf(__('Edit %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'update_item'       => sprintf(__('Update %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'add_new_item'      => sprintf(__('Add New %s', 'combostore-server'), $singular),
+					/* translators: Post Type name */
+					'new_item_name'     => sprintf(__('New %s Name', 'combostore-server'),  $singular)
+				),
+				'show_ui' 				=> true,
+				'public' 	     		=> true,
+				'rewrite' => array(
+					'slug' => 'product_badge', // This controls the base slug that will display before each term
+					'with_front' => false, // Don't display the category base before "/locations/"
+					'hierarchical' => false // This will allow URL's like "/locations/boston/cambridge/"
+				),
+			))
+		);
+	}
+
+
 	public function register_product_brand()
 	{
 
@@ -462,6 +512,15 @@ class ComboStorePostTypes
 			))
 		);
 	}
+
+
+
+
+
+
+
+
+
 	public function register_product_visibility()
 	{
 

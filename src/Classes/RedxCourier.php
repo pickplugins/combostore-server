@@ -87,13 +87,13 @@ class RedxCourier
         curl_close($ch);
 
         if ($error) {
-            throw new Exception("cURL Error: " . $error);
+            throw new Exception("cURL Error: " . esc_html($error));
         }
 
         $decoded = json_decode($response, true);
 
         if ($status >= 400) {
-            throw new Exception("REDX API Error ({$status}): " . $response);
+            throw new Exception("REDX API Error (" . esc_html($status) . "): " . esc_html($response));
         }
 
         return $decoded;

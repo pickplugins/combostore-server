@@ -50,6 +50,8 @@ class ComboStoreObjectMeta
         $this->object_name = $object;
         $table = $this->object_meta_table();
 
+
+
         $response = null;
         global $wpdb;
 
@@ -89,7 +91,9 @@ class ComboStoreObjectMeta
         }
 
 
-        $status = $wpdb->delete($table, array('id' => $id, 'meta_key' => $meta_key,), array('%d', '%s'));
+
+        $status = $wpdb->delete($table, array('object_id' => $id, 'meta_key' => $meta_key,), array('%d', '%s'));
+
 
 
         $response['status'] = $status;
@@ -117,7 +121,7 @@ class ComboStoreObjectMeta
 
 
         global $wpdb;
-
+        $updated = false;
 
 
         if (is_array($meta_value)) {
@@ -125,6 +129,8 @@ class ComboStoreObjectMeta
         }
 
         $meta_exist = $this->has_meta($object, $id, $meta_key);
+
+
 
         if ($meta_exist) {
             $updated_data = array(
@@ -212,6 +218,9 @@ class ComboStoreObjectMeta
         $prefix = $wpdb->prefix;
 
 
+        if ($object == 'products') {
+            $table = $prefix . 'cstore_products';
+        }
         if ($object == 'orders') {
             $table = $prefix . 'cstore_orders';
         }
@@ -237,6 +246,9 @@ class ComboStoreObjectMeta
         $prefix = $wpdb->prefix;
 
 
+        if ($object == 'products') {
+            $table = $prefix . 'cstore_products_meta';
+        }
         if ($object == 'orders') {
             $table = $prefix . 'cstore_orders_meta';
         }
@@ -249,6 +261,8 @@ class ComboStoreObjectMeta
         if ($object == 'expenses') {
             $table = $prefix . 'cstore_expenses_meta';
         }
+
+
 
         return $table;
     }

@@ -27,11 +27,10 @@ class ComboStoreShipping
         $description          = isset($params['description']) ? sanitize_text_field($params['description']) : '';
         $region        = isset($params['region']) ? sanitize_text_field($params['region']) : null;
         $status    = isset($params['status']) ? sanitize_text_field($params['status']) : '';
+        $countries = isset($params['countries']) ? wp_json_encode($params['countries']) : null;
         $settings = isset($params['settings']) ? wp_json_encode($params['settings']) : null;
         $priority = isset($params['priority']) ? sanitize_text_field($params['priority']) : 1;
 
-
-        error_log(wp_json_encode($params));
 
 
         global $wpdb;
@@ -45,6 +44,7 @@ class ComboStoreShipping
             'description'  => $description,
             'region'        => $region,
             'status'        => $status,
+            'countries' => $countries,
             'settings' => $settings,
             'priority' => $priority,
             'created_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
@@ -56,6 +56,7 @@ class ComboStoreShipping
             '%s',   // description
             '%s',   // region
             '%s',   // status
+            '%s',   // countries
             '%s',   // settings
             '%d',   // priority
             '%s',   // created_at
@@ -143,7 +144,6 @@ class ComboStoreShipping
     function create_shipping_method($params)
     {
 
-        error_log(wp_json_encode($params));
 
 
 
@@ -152,6 +152,7 @@ class ComboStoreShipping
         $type          = isset($params['type']) ? sanitize_text_field($params['type']) : '';
         $amount          = isset($params['amount']) ? sanitize_text_field($params['amount']) : 0;
         $description        = isset($params['description']) ? sanitize_text_field($params['description']) : '';
+        $states        = isset($params['states']) ? wp_json_encode($params['states']) : null;
         $settings        = isset($params['settings']) ? wp_json_encode($params['settings']) : null;
         $priority        = isset($params['priority']) ? sanitize_text_field($params['priority']) : 1;
         $status        = isset($params['status']) ? sanitize_text_field($params['status']) : '';
@@ -170,6 +171,7 @@ class ComboStoreShipping
             'type'          => $type,
             'amount'          => $amount,
             'description'        => $description,
+            'states'        => $states,
             'settings'        => $settings,
             'priority'        => $priority,
             'status'        => $status,
@@ -183,6 +185,7 @@ class ComboStoreShipping
             '%s',   // type
             '%s',   // amount
             '%s',   // description
+            '%s',   // states
             '%s',   // settings
             '%d',   // priority
             '%s',   // status
@@ -191,7 +194,7 @@ class ComboStoreShipping
         );
 
         $wpdb->insert($table, $data, $format);
-        $order_id = $wpdb->insert_id; // Get inserted order_id
+        $zone_id = $wpdb->insert_id; // Get inserted order_id
 
 
 
@@ -201,7 +204,7 @@ class ComboStoreShipping
 
 
             $response['success'] = true;
-            $response['zone_id'] = $order_id;
+            $response['zone_id'] = $zone_id;
         }
 
 
@@ -241,12 +244,20 @@ class ComboStoreShipping
             ARRAY_A
         );
 
+        $countries = isset($orderRow['countries']) ? json_decode($orderRow['countries'], true) : [];
+        $settings = isset($orderRow['settings']) ? json_decode($orderRow['settings'], true) : [];
 
+
+
+        $orderRow['countries'] = $countries;
+        $orderRow['settings'] = $settings;
 
         return $orderRow;
     }
-    function get_shipping_method($order_id)
+    function get_shipping_method($id)
     {
+
+
 
         $response = [];
 
@@ -256,12 +267,18 @@ class ComboStoreShipping
         $orderRow = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT * FROM $table WHERE id = %d",
-                $order_id
+                $id
             ),
             ARRAY_A
         );
 
+        $states = isset($orderRow['states']) ? json_decode($orderRow['states'], true) : [];
+        $settings = isset($orderRow['settings']) ? json_decode($orderRow['settings'], true) : [];
 
+
+
+        $orderRow['states'] = $states;
+        $orderRow['settings'] = $settings;
 
         return $orderRow;
     }
@@ -562,6 +579,126 @@ class ComboStoreShipping
     }
 
 
+
+
+
+    function get_shipping_zones_by_countryX($params)
+    {
+        $responses = [];
+
+        $country = isset($params['country'])            ? sanitize_text_field($params['country'])            : '';
+
+        global $wpdb;
+
+        $table_shipping_zones = $wpdb->prefix . 'cstore_shipping_zones';
+
+        $where  = [];
+        $query_params = [];
+
+        if (!empty($country)) {
+            $where[] = "JSON_CONTAINS(settings, %s, '$.countries')";
+            $query_params[] = wp_json_encode((string) $country);
+        }
+
+        $where_sql = '';
+
+        if (!empty($where)) {
+            $where_sql = 'WHERE ' . implode(' AND ', $where);
+        }
+
+        $limit  = isset($params['limit']) ? absint($params['limit']) : 25;
+        $offset = isset($params['offset']) ? absint($params['offset']) : 0;
+
+        $sql = "SELECT *
+            FROM $table_shipping_zones
+            $where_sql
+            LIMIT %d, %d";
+
+        $query_params[] = $offset;
+        $query_params[] = $limit;
+
+        $query = $wpdb->prepare($sql, $query_params);
+
+
+        $entries = $wpdb->get_results($query);
+        $zone_ids = array_map(function ($zone) {
+            return (int) $zone->id;
+        }, $entries);
+
+        $responses['zone_ids'] = $zone_ids;
+
+        return $responses;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    function get_all_methods_by_zone($prams)
+    {
+
+
+        $responses = [];
+
+        $zone_ids     = isset($prams['zone_ids']) ? stripslashes_deep($prams['zone_ids']) : [];
+
+
+
+        global $wpdb;
+
+        $prefix = $wpdb->prefix;
+
+        $table_shipping_methods = $prefix . 'cstore_shipping_methods';
+
+
+        $where = [];
+        $params = [];
+
+        if (!empty($zone_ids)) {
+            $placeholders = implode(',', array_fill(0, count($zone_ids), '%d'));
+
+            $where[] = "zone_id IN ($placeholders)";
+            $params = array_merge($params, $zone_ids);
+        }
+
+        if (!empty($state)) {
+            $where[] = "JSON_CONTAINS(settings, %s, '$.states')";
+            $params[] = wp_json_encode($state);
+        }
+
+        // if (!empty($city)) {
+        //     $where[] = "JSON_CONTAINS(settings, %s, '$.cities')";
+        //     $params[] = wp_json_encode($city);
+        // }
+
+        $sql = "
+            SELECT *
+            FROM {$wpdb->prefix}cstore_shipping_methods
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY priority ASC
+        ";
+
+        $query = $wpdb->prepare($sql, ...$params);
+
+        $methods = $wpdb->get_results($query);
+
+
+
+
+
+
+
+        return $methods;
+    }
+
+
     function update_shipping_zone($params)
     {
 
@@ -578,6 +715,7 @@ class ComboStoreShipping
         $description          = isset($params['description']) ? sanitize_text_field($params['description']) : '';
         $region        = isset($params['region']) ? sanitize_text_field($params['region']) : null;
         $status    = isset($params['status']) ? sanitize_text_field($params['status']) : '';
+        $countries = isset($params['countries']) ? wp_json_encode($params['countries']) : null;
         $settings = isset($params['settings']) ? wp_json_encode($params['settings']) : null;
         $priority = isset($params['priority']) ? sanitize_text_field($params['priority']) : 1;
 
@@ -588,6 +726,7 @@ class ComboStoreShipping
             'description'  => $description,
             'region'        => $region,
             'status'        => $status,
+            'countries' => $countries,
             'settings' => $settings,
             'priority' => $priority,
             'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
@@ -599,6 +738,7 @@ class ComboStoreShipping
             '%s',   // description
             '%s',   // region
             '%s',   // status
+            '%s',   // countries
             '%s',   // settings
             '%d',   // priority
             '%s'    // updated_at
@@ -633,6 +773,7 @@ class ComboStoreShipping
         $type          = isset($params['type']) ? sanitize_text_field($params['type']) : '';
         $amount          = isset($params['amount']) ? sanitize_text_field($params['amount']) : 0;
         $description        = isset($params['description']) ? sanitize_text_field($params['description']) : '';
+        $states        = isset($params['states']) ? wp_json_encode($params['states']) : null;
         $settings        = isset($params['settings']) ? wp_json_encode($params['settings']) : null;
         $priority        = isset($params['priority']) ? sanitize_text_field($params['priority']) : 1;
         $status        = isset($params['status']) ? sanitize_text_field($params['status']) : '';
@@ -651,6 +792,7 @@ class ComboStoreShipping
             'type'          => $type,
             'amount'          => $amount,
             'description'        => $description,
+            'states'        => $states,
             'settings'        => $settings,
             'priority'        => $priority,
             'status'        => $status,
@@ -664,6 +806,7 @@ class ComboStoreShipping
             '%s',   // type
             '%s',   // amount
             '%s',   // description
+            '%s',   // states
             '%s',   // settings
             '%d',   // priority
             '%s',   // status
@@ -687,5 +830,255 @@ class ComboStoreShipping
             $responses['success'] = false;
         }
         return $responses;
+    }
+
+
+    /**
+     * Find available shipping methods.
+     *
+     * Shipping flow:
+     * Country -> Shipping Zone -> State -> Shipping Methods
+     *
+     * @param array $params {
+     *     @type string $country Country code, e.g. BD.
+     *     @type string $state   State code, e.g. BD-55.
+     * }
+     *
+     * @return array
+     */
+    function find_shipping_methods($params)
+    {
+        global $wpdb;
+
+        $response = [
+            'methods' => [],
+        ];
+
+        $country = isset($params['country'])            ? sanitize_text_field($params['country'])            : '';
+
+        $state = isset($params['state'])            ? sanitize_text_field($params['state'])            : '';
+
+        // Backward compatibility if checkout currently sends city.
+        if (empty($state) && isset($params['city'])) {
+            $state = sanitize_text_field($params['city']);
+        }
+
+
+
+        if (empty($country)) {
+            return $response;
+        }
+
+
+        /*
+     * ---------------------------------------------------------
+     * 1. Find shipping zones for country
+     * ---------------------------------------------------------
+     */
+
+        $zones = $this->get_shipping_zones_by_country([
+            'country' => $country,
+        ]);
+
+        $zone_ids = !empty($zones['zone_ids'])            ? array_map('intval', $zones['zone_ids'])            : [];
+
+
+
+
+        if (empty($zone_ids)) {
+            return $response;
+        }
+
+
+
+        /*
+     * ---------------------------------------------------------
+     * 2. Find shipping methods belonging to those zones
+     * ---------------------------------------------------------
+     */
+        $table_shipping_methods = $wpdb->prefix . 'cstore_shipping_methods';
+
+        $placeholders = implode(
+            ',',
+            array_fill(0, count($zone_ids), '%d')
+        );
+
+        $sql = "
+        SELECT *
+        FROM {$table_shipping_methods}
+        WHERE zone_id IN ($placeholders)
+          AND status = 1
+        ORDER BY priority ASC, id ASC
+    ";
+
+        $query = $wpdb->prepare(
+            $sql,
+            ...$zone_ids
+        );
+
+        $methods = $wpdb->get_results($query);
+
+        error_log("methods");
+        error_log(wp_json_encode($methods));
+
+
+        if (empty($methods)) {
+            return $response;
+        }
+
+        /*
+     * ---------------------------------------------------------
+     * 3. Filter methods by state
+     *
+     * states column example:
+     * ["BD-55"]
+     *
+     * Empty states = available for entire zone.
+     * ---------------------------------------------------------
+     */
+        $available_methods = [];
+
+        foreach ($methods as $method) {
+
+            $method_states = [];
+
+            if (!empty($method->states)) {
+                $decoded_states = json_decode(
+                    $method->states,
+                    true
+                );
+
+                if (is_array($decoded_states)) {
+                    $method_states = $decoded_states;
+                }
+            }
+
+            /*
+         * No state restriction.
+         *
+         * Example:
+         * states = []
+         *
+         * This method is available throughout
+         * the shipping zone.
+         */
+            if (empty($method_states)) {
+                $available_methods[] = $method;
+                continue;
+            }
+
+            /*
+         * State-specific method.
+         */
+            if (!empty($state) && in_array($state, $method_states, true)) {
+                $available_methods[] = $method;
+            }
+        }
+
+        /*
+     * ---------------------------------------------------------
+     * 4. Return methods
+     * ---------------------------------------------------------
+     */
+
+        error_log("available_methods");
+        error_log(wp_json_encode($available_methods));
+
+
+
+        $response['methods'] = $available_methods;
+
+        return $response;
+    }
+
+
+    /**
+     * Get shipping zones by country.
+     *
+     * Shipping zone countries are stored in the `countries` column.
+     *
+     * Example:
+     * countries = ["BD"]
+     *
+     * @param array $params {
+     *     @type string $country Country code, e.g. BD.
+     *     @type int    $limit   Number of zones to return.
+     *     @type int    $offset  Offset.
+     * }
+     *
+     * @return array
+     */
+    function get_shipping_zones_by_country($params)
+    {
+        global $wpdb;
+
+        $response = [
+            'zone_ids' => [],
+            'zones'    => [],
+        ];
+
+        $country = isset($params['country'])
+            ? sanitize_text_field($params['country'])
+            : '';
+
+        if (empty($country)) {
+            return $response;
+        }
+
+        $table_shipping_zones = $wpdb->prefix . 'cstore_shipping_zones';
+
+        $limit = isset($params['limit'])
+            ? absint($params['limit'])
+            : 25;
+
+        $offset = isset($params['offset'])
+            ? absint($params['offset'])
+            : 0;
+
+        /*
+     * Find active zones where the country
+     * exists in the countries JSON array.
+     *
+     * Example:
+     * countries = ["BD", "IN"]
+     */
+        $sql = "
+        SELECT *
+        FROM {$table_shipping_zones}
+        WHERE status = 1
+          AND JSON_CONTAINS(countries, %s)
+        ORDER BY priority ASC, id ASC
+        LIMIT %d, %d
+    ";
+
+        $query = $wpdb->prepare(
+            $sql,
+            wp_json_encode($country),
+            $offset,
+            $limit
+        );
+
+        $zones = $wpdb->get_results($query);
+
+        if (empty($zones)) {
+            return $response;
+        }
+
+        /*
+     * Zone IDs
+     */
+        $response['zone_ids'] = array_map(
+            function ($zone) {
+                return (int) $zone->id;
+            },
+            $zones
+        );
+
+        /*
+     * Return zones as well.
+     */
+        $response['zones'] = $zones;
+
+        return $response;
     }
 }

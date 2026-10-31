@@ -281,7 +281,7 @@ if (!class_exists('JWT')) {
                         }
                         return sodium_crypto_sign_detached($msg, $key);
                     } catch (Exception $e) {
-                        throw new DomainException($e->getMessage(), 0, $e);
+                        throw new DomainException(esc_html($e->getMessage()), 0, esc_html($e));
                     }
             }
 
@@ -323,7 +323,7 @@ if (!class_exists('JWT')) {
                     }
                     // returns 1 on success, 0 on failure, -1 on error.
                     throw new DomainException(
-                        'OpenSSL error: ' . \openssl_error_string()
+                        esc_html('OpenSSL error: ' . \openssl_error_string())
                     );
                 case 'sodium_crypto':
                     if (!\function_exists('sodium_crypto_sign_verify_detached')) {
@@ -344,7 +344,7 @@ if (!class_exists('JWT')) {
                         }
                         return sodium_crypto_sign_verify_detached($signature, $msg, $key);
                     } catch (Exception $e) {
-                        throw new DomainException($e->getMessage(), 0, $e);
+                        throw new DomainException(esc_html($e->getMessage()), 0, esc_html($e));
                     }
                 case 'hash_hmac':
                 default:
@@ -372,7 +372,7 @@ if (!class_exists('JWT')) {
             if ($errno = \json_last_error()) {
                 self::handleJsonError($errno);
             } elseif ($obj === null && $input !== 'null') {
-                throw new DomainException('Null result with non-null input');
+                throw new DomainException(esc_html('Null result with non-null input'));
             }
             return $obj;
         }
@@ -392,10 +392,10 @@ if (!class_exists('JWT')) {
             if ($errno = \json_last_error()) {
                 self::handleJsonError($errno);
             } elseif ($json === 'null') {
-                throw new DomainException('Null result with non-null input');
+                throw new DomainException(esc_html('Null result with non-null input'));
             }
             if ($json === false) {
-                throw new DomainException('Provided object could not be encoded to valid JSON');
+                throw new DomainException(esc_html('Provided object could not be encoded to valid JSON'));
             }
             return $json;
         }
@@ -522,8 +522,8 @@ if (!class_exists('JWT')) {
             ];
             throw new DomainException(
                 isset($messages[$errno])
-                    ? $messages[$errno]
-                    : 'Unknown JSON error: ' . $errno
+                    ? esc_html($messages[$errno])
+                    : esc_html('Unknown JSON error: ' . $errno)
             );
         }
 

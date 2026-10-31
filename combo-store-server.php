@@ -28,6 +28,7 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 
 
 use ComboStore\Classes\ComboStoreCore;
+use ComboStore\Classes\SteadfastCourier;
 use ComboStore\Classes\ComboStoreRest;
 use ComboStore\Classes\ComboRequestLemonsqueezy;
 use ComboStore\Classes\ComboStoreCrons;
@@ -55,6 +56,9 @@ if (class_exists('ComboStore\Classes\ComboStoreCrons')) {
 }
 if (class_exists('ComboStore\Classes\ComboStorePostTypes')) {
     new ComboStorePostTypes();
+}
+if (class_exists('ComboStore\Classes\SteadfastCourier')) {
+    new SteadfastCourier();
 }
 
 

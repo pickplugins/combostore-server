@@ -3,7 +3,7 @@
 namespace ComboStore\Classes;
 
 
-class ComboStoreCore
+class ComboStoreAdminCore
 {
 
     public function __construct()

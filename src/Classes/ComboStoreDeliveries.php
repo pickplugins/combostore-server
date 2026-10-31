@@ -27,7 +27,7 @@ class ComboStoreDeliveries
         $tracking_code          = isset($params['tracking_code']) ? sanitize_text_field($params['tracking_code']) : '';
         $courier_data          = isset($params['courier_data']) ? sanitize_text_field($params['courier_data']) : null;
         $status          = isset($params['status']) ? sanitize_text_field($params['status']) : 'pending';
-'';
+
         $startLatLng        = isset($params['startLatLng']) ? stripslashes_deep($params['startLatLng']) : null;
         $endLatLng        = isset($params['endLatLng']) ? stripslashes_deep($params['endLatLng']) : null;
 
@@ -136,17 +136,16 @@ class ComboStoreDeliveries
         global $wpdb;
         $table = $wpdb->prefix . "cstore_deliveries";
 
-        if(!empty($delivery_id)){
+        if (!empty($delivery_id)) {
 
             $rowData = $wpdb->get_row(
                 $wpdb->prepare(
                     "SELECT * FROM $table WHERE id = %d",
                     $delivery_id
-                    ),
-                    ARRAY_A
-                );
-
-        }else{
+                ),
+                ARRAY_A
+            );
+        } else {
             $rowData = $wpdb->get_row(
                 $wpdb->prepare(
                     "SELECT * FROM $table WHERE order_id = %d",
@@ -189,20 +188,22 @@ class ComboStoreDeliveries
 
 
         // ✅ Extract variables safely (example fields you may want to update)
-        $delivery_id      = isset($params['id']) ? intval($params['id']) : 0;        $order_id      = isset($params['order_id']) ? intval($params['order_id']) : 0;
+        $delivery_id      = isset($params['id']) ? intval($params['id']) : 0;
+        $order_id      = isset($params['order_id']) ? intval($params['order_id']) : 0;
 
         $courier               = isset($params['courier']) ? sanitize_text_field($params['courier']) : '';
         $consignment_id               = isset($params['consignment_id']) ? sanitize_text_field($params['consignment_id']) : '';
+        $tracking_code               = isset($params['tracking_code']) ? sanitize_text_field($params['tracking_code']) : '';
         $status               = isset($params['status']) ? sanitize_text_field($params['status']) : '';
         $type               = isset($params['type']) ? sanitize_text_field($params['type']) : '';
         $rider_id               = isset($params['rider_id']) ? sanitize_text_field($params['rider_id']) : '';
-null;
+        null;
         $startLatLng    = !empty($params['startLatLng']) ? (wp_unslash($params['startLatLng'])) : null;
         $endLatLng    = !empty($params['endLatLng']) ? (wp_unslash($params['endLatLng'])) : null;
 
 
-        
-        
+
+
 
         // ✅ Data to update
         $data = array(
@@ -210,6 +211,7 @@ null;
             'status'              => $status,
             'courier'              => $courier,
             'consignment_id'              => $consignment_id,
+            'tracking_code'              => $tracking_code,
             'rider_id'              => $rider_id,
             'startLatLng'   => wp_json_encode($startLatLng),
             'endLatLng'   => wp_json_encode($endLatLng),
@@ -222,6 +224,7 @@ null;
             '%s',  // status
             '%s',  // courier
             '%s',  // consignment_id
+            '%s',  // tracking_code
             '%d',  // rider_id
             '%s',  // startLatLng
             '%s',  // endLatLng
@@ -285,9 +288,10 @@ null;
 
         $order_id           = isset($prams['order_id']) ? sanitize_text_field($prams['order_id']) : '';
         $delivery_id           = isset($prams['delivery_id']) ? sanitize_text_field($prams['delivery_id']) : '';
+        $consignment_id           = isset($prams['consignment_id']) ? sanitize_text_field($prams['consignment_id']) : '';
 
         $status           = isset($prams['status']) ? sanitize_text_field($prams['status']) : '';
-        $latlng          = isset($prams['latlng']) ? ($prams['latlng']) : '';
+        $latlng          = isset($prams['latlng']) ? ($prams['latlng']) : null;
 
         $notes           = isset($prams['notes']) ? sanitize_text_field($prams['notes']) : '';
 
@@ -301,6 +305,7 @@ null;
         $data = array(
             'order_id'     => $order_id,
             'delivery_id'   => $delivery_id,
+            'consignment_id'   => $consignment_id,
             'status' => $status,
             'latlng'          => wp_json_encode($latlng),
             'notes'     => $notes,
@@ -311,6 +316,7 @@ null;
         $format = array(
             '%d', // $order_id
             '%d', // $delivery_id
+            '%s', // consignment_id
             '%s', // $status
             '%s', // $latlng
             '%s', // $notes

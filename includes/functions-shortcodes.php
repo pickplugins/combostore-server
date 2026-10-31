@@ -41,7 +41,7 @@ function replace_meta_key($old_key, $new_key)
 }
 
 
-//replace_meta_key('price', 'regularPrice');
+//replace_meta_key('price', 'regular_price');
 
 
 
@@ -108,7 +108,7 @@ function combo_store_update_instock()
 
       $post_id = get_the_ID();
 
-      update_post_meta($post_id, 'stockStatus', 'instock');
+      update_post_meta($post_id, 'stock_status', 'instock');
 
 
       $count++;
@@ -126,6 +126,3 @@ function combo_store_update_instock()
 
 
 }
-
-
-

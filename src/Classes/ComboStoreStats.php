@@ -192,7 +192,7 @@ class ComboStoreStats
 
 
 
-    function get_top_customers($args)
+    function get_top_customersX($args)
     {
 
         $response = [];
@@ -201,8 +201,11 @@ class ComboStoreStats
         $object = $args['object'] ?? null;
         $start_date = $args['start_date'] ?? null;
         $end_date = $args['end_date'] ?? null;
-        $limit = $args['limit'] ?? 20;
+        $limit = $args['per_page'] ?? 20;
+        $paged = $args['paged'] ?? 1;
 
+
+        error_log(wp_json_encode($args));
 
         global $wpdb;
 
@@ -252,6 +255,85 @@ class ComboStoreStats
     }
 
 
+
+    function get_top_customers($args)
+    {
+        global $wpdb;
+
+        $response = [];
+
+        $start_date = $args['start_date'] ?? null;
+        $end_date   = $args['end_date'] ?? null;
+
+        // Pagination
+        $limit = max(1, min(100, absint($args['per_page'] ?? 20)));
+        $paged = max(1, absint($args['paged'] ?? 1));
+        $offset = ($paged - 1) * $limit;
+
+        $table = $wpdb->prefix . 'cstore_orders';
+
+        // Base WHERE conditions
+        $where = "
+        WHERE status = %s
+        AND payment_status = %s
+    ";
+
+        $params = ['completed', 'paid'];
+
+        if (!empty($start_date)) {
+            $where .= " AND completed_at >= %s";
+            $params[] = sanitize_text_field($start_date) . ' 00:00:00';
+        }
+
+        if (!empty($end_date)) {
+            $where .= " AND completed_at <= %s";
+            $params[] = sanitize_text_field($end_date) . ' 23:59:59';
+        }
+
+        // Count total customers matching the same filters
+        $count_query = "
+        SELECT COUNT(DISTINCT billing_email)
+        FROM {$table}
+        {$where}
+    ";
+
+        $total = (int) $wpdb->get_var(
+            $wpdb->prepare($count_query, $params)
+        );
+
+        // Fetch paginated customers
+        $query = "
+        SELECT
+            userid,
+            billing_name,
+            billing_email,
+            COUNT(id) AS total_orders,
+            SUM(total_amount) AS total_spent
+        FROM {$table}
+        {$where}
+        GROUP BY billing_email
+        ORDER BY total_spent DESC
+        LIMIT %d OFFSET %d
+    ";
+
+        $query_params = array_merge($params, [$limit, $offset]);
+
+        $prepared = $wpdb->prepare($query, $query_params);
+
+        $response['users'] = $wpdb->get_results($prepared);
+
+        // Pagination metadata
+        // $response['pagination'] = [
+        //     'total'         => $total,
+        //     'per_page'      => $limit,
+        //     'current_page'  => $paged,
+        //     'total_pages'   => (int) ceil($total / $limit),
+        //     'has_next_page' => $paged < ceil($total / $limit),
+        //     'has_prev_page' => $paged > 1,
+        // ];
+
+        return $response;
+    }
 
 
 
@@ -1657,15 +1739,15 @@ class ComboStoreStats
     }
 
 
-    function get_top_selling_products($args = [])
+    function get_top_selling_productsX($args = [])
     {
 
         $response = [];
 
         $start_date = $args['start_date'] ?? null;
         $end_date = $args['end_date'] ?? null;
-        $limit = $args['limit'] ?? 10;
-        $page = $args['page'] ?? 1;
+        $limit = $args['per_page'] ?? 10;
+        $page = $args['paged'] ?? 1;
 
 
 
@@ -1735,6 +1817,121 @@ class ComboStoreStats
 
         return $response;
     }
+
+
+
+    function get_top_selling_products($args = [])
+    {
+        global $wpdb;
+
+        $response = [];
+
+        $start_date = $args['start_date'] ?? null;
+        $end_date   = $args['end_date'] ?? null;
+
+        // Pagination
+        $limit  = max(1, min(100, absint($args['per_page'] ?? $args['limit'] ?? 10)));
+        $paged  = max(1, absint($args['paged'] ?? $args['page'] ?? 1));
+        $offset = ($paged - 1) * $limit;
+
+        $orders_table = $wpdb->prefix . 'cstore_orders';
+        $items_table  = $wpdb->prefix . 'cstore_order_items';
+
+        // Base WHERE conditions
+        $where = "
+        WHERE o.status = %s
+        AND o.payment_status = %s
+    ";
+
+        $params = ['completed', 'paid'];
+
+        // Start date filter
+        if (!empty($start_date)) {
+            $where .= " AND o.completed_at >= %s";
+            $params[] = sanitize_text_field($start_date) . ' 00:00:00';
+        }
+
+        // End date filter
+        if (!empty($end_date)) {
+            $where .= " AND o.completed_at <= %s";
+            $params[] = sanitize_text_field($end_date) . ' 23:59:59';
+        }
+
+        // Count total distinct products matching the filters
+        $count_query = "
+        SELECT COUNT(*)
+        FROM (
+            SELECT oi.product_id
+            FROM {$items_table} oi
+            INNER JOIN {$orders_table} o ON oi.order_id = o.id
+            {$where}
+            GROUP BY oi.product_id, oi.product_name, oi.sku
+        ) AS product_groups
+    ";
+
+        $total = (int) $wpdb->get_var(
+            $wpdb->prepare($count_query, $params)
+        );
+
+        // Fetch paginated top-selling products
+        $query = "
+        SELECT
+            oi.product_id,
+            oi.product_name,
+            oi.sku,
+            SUM(oi.quantity) AS total_units_sold,
+            COUNT(DISTINCT oi.order_id) AS total_orders,
+            SUM(oi.total) AS total_revenue
+        FROM {$items_table} oi
+        INNER JOIN {$orders_table} o ON oi.order_id = o.id
+        {$where}
+        GROUP BY oi.product_id, oi.product_name, oi.sku
+        ORDER BY total_units_sold DESC, oi.product_id ASC
+        LIMIT %d OFFSET %d
+    ";
+
+        $query_params = array_merge($params, [$limit, $offset]);
+
+        $prepared_query = $wpdb->prepare($query, $query_params);
+        $items = $wpdb->get_results($prepared_query);
+
+        // Add product images and current product titles
+        foreach ($items as $key => $value) {
+            $id = absint($value->product_id);
+
+            $product_name = get_the_title($id);
+
+            if ($product_name) {
+                $items[$key]->product_name = $product_name;
+            }
+
+            $items[$key]->product_image = get_the_post_thumbnail_url(
+                $id,
+                'thumbnail'
+            );
+        }
+
+        $total_pages = (int) ceil($total / $limit);
+
+        $response['products'] = $items;
+
+        // $response['pagination'] = [
+        //     'total'         => $total,
+        //     'per_page'      => $limit,
+        //     'current_page'  => $paged,
+        //     'total_pages'   => $total_pages,
+        //     'has_next_page' => $paged < $total_pages,
+        //     'has_prev_page' => $paged > 1,
+        // ];
+
+        return $response;
+    }
+
+
+
+
+
+
 
 
 

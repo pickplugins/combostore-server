@@ -3,6 +3,11 @@
 namespace ComboStore\Classes;
 
 use WP_User;
+use WP_Error;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use ComboStore\Classes\ComboStoreSMS;
+
 
 if (!defined('ABSPATH')) exit;  // if direct access
 
@@ -19,7 +24,6 @@ class ComboStoreRegister
     function create_user($args)
     {
 
-        error_log(wp_json_encode($args));
 
         $password = !empty($args['password']) ? $args['password'] : $this->generate_password();
         $role = isset($args['role']) ? $args['role'] : '';
@@ -33,7 +37,6 @@ class ComboStoreRegister
         if ($registerBy == 'mobile') {
 
             $blogusers = get_users('meta_value=' . $mobile . '&meta_key=mobile');
-            error_log(wp_json_encode($blogusers));
 
             if (count($blogusers) > 0) {
                 $response['error'] = true;
@@ -125,6 +128,175 @@ class ComboStoreRegister
         }
     }
 
+
+
+
+
+
+    /**
+     * Find WordPress user ID by phone user meta.
+     *
+     * @param string $phone Phone number.
+     * @return int|WP_Error User ID or error.
+     */
+    function get_user_id_by_phone($phone)
+    {
+
+        $phone = trim((string) $phone);
+
+        if (empty($phone)) {
+            return new WP_Error(
+                'invalid_phone',
+                'Phone number is required.',
+                ['status' => 400]
+            );
+        }
+
+        $users = get_users([
+            'meta_key'   => 'phone',
+            'meta_value' => $phone,
+            'number'     => 2,
+            'fields'     => 'ID',
+        ]);
+
+        if (empty($users)) {
+            return new WP_Error(
+                'user_not_found',
+                'No user found with this phone number.',
+                ['status' => 404]
+            );
+        }
+
+        if (count($users) > 1) {
+            return new WP_Error(
+                'duplicate_phone',
+                'Multiple users have this phone number.',
+                ['status' => 409]
+            );
+        }
+
+        return (int) $users[0];
+    }
+
+
+    /**
+     * Generate a 6-digit OTP and save it in user meta.
+     *
+     * @param string $phone         Phone number.
+     * @param int    $expiry_minutes OTP validity in minutes.
+     * @return string|WP_Error Generated OTP or error.
+     */
+    function generate_otp($phone, $expiry_minutes = 5)
+    {
+
+        $user_id = $this->get_user_id_by_phone($phone);
+
+        if (is_wp_error($user_id)) {
+            return $user_id;
+        }
+
+        $expiry_minutes = max(1, absint($expiry_minutes));
+
+        // Generate a cryptographically secure 6-digit OTP.
+        $otp = (string) random_int(100000, 999999);
+
+        // Store the hashed OTP.
+        update_user_meta(
+            $user_id,
+            '_combostore_otp',
+            wp_hash_password($otp)
+        );
+
+        // Store expiry as a Unix timestamp.
+        update_user_meta(
+            $user_id,
+            '_combostore_otp_expire',
+            time() + ($expiry_minutes * MINUTE_IN_SECONDS)
+        );
+
+        return $otp;
+    }
+
+
+    /**
+     * Verify OTP using the user's phone number.
+     *
+     * OTP is invalidated after successful verification or expiry.
+     *
+     * @param string $phone Phone number.
+     * @param string $otp   Submitted OTP.
+     * @return true|WP_Error
+     */
+    function verify_otp($phone, $otp)
+    {
+
+        $user_id = $this->get_user_id_by_phone($phone);
+
+        if (is_wp_error($user_id)) {
+            return $user_id;
+        }
+
+        $otp = trim((string) $otp);
+
+        if (!preg_match('/^\d{6}$/', $otp)) {
+            return new WP_Error(
+                'invalid_otp',
+                'Please enter a valid 6-digit OTP.',
+                ['status' => 400]
+            );
+        }
+
+        $stored_hash = get_user_meta(
+            $user_id,
+            '_combostore_otp',
+            true
+        );
+
+        $expires_at = (int) get_user_meta(
+            $user_id,
+            '_combostore_otp_expire',
+            true
+        );
+
+        if (empty($stored_hash) || empty($expires_at)) {
+            return new WP_Error(
+                'otp_not_found',
+                'OTP not found. Please request a new OTP.',
+                ['status' => 400]
+            );
+        }
+
+        if (time() >= $expires_at) {
+
+            delete_user_meta($user_id, '_combostore_otp');
+            delete_user_meta($user_id, '_combostore_otp_expire');
+
+            return new WP_Error(
+                'otp_expired',
+                'OTP has expired. Please request a new OTP.',
+                ['status' => 400]
+            );
+        }
+
+        if (!wp_check_password($otp, $stored_hash, $user_id)) {
+            return new WP_Error(
+                'otp_mismatch',
+                'Incorrect OTP.',
+                ['status' => 400]
+            );
+        }
+
+        // OTP is single-use.
+        delete_user_meta($user_id, '_combostore_otp');
+        delete_user_meta($user_id, '_combostore_otp_expire');
+
+        return true;
+    }
+
+
+
+
+
     function regenerate_username($username)
     {
         if (username_exists($username)) {
@@ -196,6 +368,9 @@ class ComboStoreRegister
 
         return $response;
     }
+
+
+
 
 
 

@@ -23,18 +23,41 @@ function cstore_process_scheduled_ordersX()
   $now = current_time('mysql');
 
   // Get scheduled order IDs
-  $order_ids = $wpdb->get_col(
-    $wpdb->prepare(
-      "
-            SELECT DISTINCT object_id
-            FROM {$table_orders_meta}
-            WHERE meta_key = %s
-              AND meta_value <= %s
-            ",
-      'scheduled_at',
-      $now
-    )
-  );
+  // $order_ids = $wpdb->get_col(
+  //   $wpdb->prepare(
+  //     "
+  //           SELECT DISTINCT object_id
+  //           FROM {$table_orders_meta}
+  //           WHERE meta_key = %s
+  //             AND meta_value <= %s
+  //           ",
+  //     'scheduled_at',
+  //     $now
+  //   )
+  // );
+
+
+  $cache_key = 'scheduled_order_ids_' . md5($now);
+  $cache_group = 'orders';
+
+  $order_ids = wp_cache_get($cache_key, $cache_group);
+
+  if (false === $order_ids) {
+    $order_ids = $wpdb->get_col(
+      $wpdb->prepare(
+        "
+			SELECT DISTINCT object_id
+			FROM {$table_orders_meta}
+			WHERE meta_key = %s
+				AND meta_value <= %s
+			",
+        'scheduled_at',
+        $now
+      )
+    );
+
+    wp_cache_set($cache_key, $order_ids, $cache_group, MINUTE_IN_SECONDS);
+  }
 
   if (empty($order_ids)) {
     return 0;

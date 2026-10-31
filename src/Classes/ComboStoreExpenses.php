@@ -127,7 +127,7 @@ class ComboStoreExpenses
     }
 
 
-  function get_expense($expense_id)
+    function get_expense($expense_id)
     {
 
         $response = [];
@@ -151,8 +151,8 @@ class ComboStoreExpenses
 
         //    $expenseRow['advance_payment_note'] = $advance_payment_note;
 
-       
-      $order_items = $this->get_purchase_items($expense_id);
+
+        $order_items = $this->get_purchase_items($expense_id);
 
         foreach ($order_items as $order_item) {
 
@@ -171,7 +171,7 @@ class ComboStoreExpenses
     }
 
 
- 
+
 
     function get_expenses($prams)
     {
@@ -284,11 +284,9 @@ class ComboStoreExpenses
 
             $entries = $wpdb->get_results($query);
 
-          
+
 
             $total = count($entries);
-                                                                                            
-
         } else {
             $entries = $wpdb->get_results("SELECT * FROM $table_expenses WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
             $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_expenses WHERE userid='$user_id'");
@@ -303,10 +301,12 @@ class ComboStoreExpenses
 
         foreach ($entries as $key => $entry) {
             $user = get_user_by('id', $entry->created_by);
+
+
             $entry->created_by = [
-                'name'=>$user->display_name,
-                'id'=>$user->ID
-                ];
+                'name' => isset($user->display_name) ? $user->display_name : '',
+                'id' => isset($user->ID) ? $user->ID : '',
+            ];
 
             $entries[$key]->lineItems = $this->get_purchase_items($entry->id);
         }
@@ -362,7 +362,7 @@ class ComboStoreExpenses
 
 
 
-        $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) :get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
+        $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
 
 
         global $wpdb;
@@ -425,11 +425,11 @@ class ComboStoreExpenses
 
 
         $prams = [
-                "expense_id" => $id,
-                "lineItems" => $lineItems,
-            ];
+            "expense_id" => $id,
+            "lineItems" => $lineItems,
+        ];
 
-            $this->insert_purchase_items($prams);
+        $this->insert_purchase_items($prams);
 
 
         if ($updated) {
@@ -513,7 +513,7 @@ class ComboStoreExpenses
             $response['status'] = 'success';
         }
 
-            return $response;
+        return $response;
 
         // if ($purchase_count > 0) {
         //     return true;
@@ -591,7 +591,7 @@ class ComboStoreExpenses
             $response['status'] = 'success';
         }
 
-            return $response;
+        return $response;
 
 
         // if ($purchase_count > 0) {
@@ -605,10 +605,10 @@ class ComboStoreExpenses
 
 
 
- function delete_purchase_items($expense_id)
+    function delete_purchase_items($expense_id)
     {
 
-    
+
         global $wpdb;
         $prefix = $wpdb->prefix;
         $table = $prefix . 'cstore_expenses_items';
@@ -654,16 +654,15 @@ class ComboStoreExpenses
 
 
         foreach ($purchase_items as $key => $entry) {
-     
+
             $product_name = isset($entry->product_name) ? $entry->product_name : '';
             $product_id = isset($entry->product_id) ? $entry->product_id : '';
-            
-            if(empty($product_name)){
+
+            if (empty($product_name)) {
                 $product_name = get_the_title($product_id);
             }
 
             $purchase_items[$key]->product_name = $product_name;
-
         }
 
 
@@ -671,7 +670,7 @@ class ComboStoreExpenses
     }
 
 
-    function search_expense_items($keyword )
+    function search_expense_items($keyword)
     {
 
         $response = [];
@@ -681,7 +680,7 @@ class ComboStoreExpenses
 
         $limit = 10;
 
-                $query = $wpdb->prepare(
+        $query = $wpdb->prepare(
             "SELECT * 
             FROM $table_order_items 
             WHERE product_name LIKE %s
@@ -694,17 +693,14 @@ class ComboStoreExpenses
 
 
         foreach ($purchase_items as $key => $entry) {
-     
+
             $product_name = isset($entry->product_name) ? $entry->product_name : '';
             $product_id = isset($entry->product_id) ? $entry->product_id : '';
-            
-            if(empty($product_name)){
+
+            if (empty($product_name)) {
                 $product_name = get_the_title($product_id);
-            $purchase_items[$key]->product_name = $product_name;
-
+                $purchase_items[$key]->product_name = $product_name;
             }
-
-
         }
 
         $response['posts'] = $purchase_items;

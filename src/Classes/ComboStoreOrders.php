@@ -3,6 +3,7 @@
 namespace ComboStore\Classes;
 
 use Error;
+use ComboStore\Classes\ComboStoreProduct;
 use ComboStore\Classes\ComboStoreObjectMeta;
 use ComboStore\Classes\ComboStoreSubscriptions;
 use ComboStore\Classes\ComboStoreRegister;
@@ -22,7 +23,6 @@ class ComboStoreOrders
     function create_order($params)
     {
 
-        error_log(wp_json_encode($params));
 
 
         $user_id         = isset($params['userid']) ? intval($params['userid']) : 0;
@@ -73,7 +73,9 @@ class ComboStoreOrders
         $cartItems = isset($params['cartItems']) ? stripslashes_deep($params['cartItems']) : [];
         $delivery_location = isset($params['delivery_location']) ? stripslashes_deep($params['delivery_location']) : [];
         $assign_to      = isset($params['assign_to']) ? stripslashes_deep($params['assign_to']) : [];
+        $meta      = isset($params['meta']) ? stripslashes_deep($params['meta']) : [];
         $scheduled_at = isset($params['scheduled_at']) ? sanitize_text_field($params['scheduled_at']) : null;
+
 
 
         // get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
@@ -137,13 +139,14 @@ class ComboStoreOrders
             'billing_address' => $billing_address,
             'billing_city'    => $billing_city,
             'billing_country' => $billing_country,
-            'assign_to' => $assign_to,
 
             'shipping_name'   => $shipping_name,
             'shipping_phone'  => $shipping_phone,
             'shipping_address' => $shipping_address,
             'shipping_city'   => $shipping_city,
             'shipping_country' => $shipping_country,
+            'assign_to' => $assign_to,
+            'meta'    => $meta,
             'scheduled_at'    => $scheduled_at,
             'created_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
             'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
@@ -178,6 +181,7 @@ class ComboStoreOrders
             '%s',   // shipping_city
             '%s',   // shipping_country
             '%s',   // assign_to
+            '%s',   // meta
             '%s',   // scheduled_at
             '%s',   // created_at
             '%s'    // updated_at
@@ -750,7 +754,7 @@ class ComboStoreOrders
         // ✅ Extract variables safely (example fields you may want to update)
         $order_id      = isset($params['id']) ? intval($params['id']) : 0;
         $user_id      = isset($params['userid']) ? intval($params['userid']) : 0;
-        $assign_to      = isset($params['assign_to']) ? stripslashes_deep($params['assign_to']) : [];
+
         $status               = isset($params['status']) ? sanitize_text_field($params['status']) : null;
         $currency               = isset($params['currency']) ? sanitize_text_field($params['currency']) : "";
         $billing_name               = isset($params['billing_name']) ? sanitize_text_field($params['billing_name']) : null;
@@ -775,24 +779,25 @@ class ComboStoreOrders
 
 
 
-        $total_amount    = isset($params['total_amount']) ? floatval($params['total_amount']) : 0.00;
-        $subtotal_amount = isset($params['subtotal_amount']) ? floatval($params['subtotal_amount']) : 0.00;
-        $discount_amount = isset($params['discount_amount']) ? floatval($params['discount_amount']) : 0.00;
-        $tax_amount      = isset($params['tax_amount']) ? floatval($params['tax_amount']) : 0.00;
-        $shipping_amount = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : 0.00;
-        $advance_payment = isset($params['advance_payment']) ? floatval($params['advance_payment']) : 0.00;
-        $advance_payment_note = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) : '';
-        $trade_price = isset($params['trade_price']) ? floatval($params['trade_price']) : 0.00;
-        $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : 0.00;
-        $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : 0.00;
+        $total_amount    = isset($params['total_amount']) ? floatval($params['total_amount']) : null;
+        $subtotal_amount = isset($params['subtotal_amount']) ? floatval($params['subtotal_amount']) : null;
+        $discount_amount = isset($params['discount_amount']) ? floatval($params['discount_amount']) : null;
+        $tax_amount      = isset($params['tax_amount']) ? floatval($params['tax_amount']) : null;
+        $shipping_amount = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : null;
+        $advance_payment = isset($params['advance_payment']) ? floatval($params['advance_payment']) : null;
+        $advance_payment_note = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) : null;
+        $trade_price = isset($params['trade_price']) ? floatval($params['trade_price']) : null;
+        $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : null;
+        $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : null;
+        $assign_to      = isset($params['assign_to']) ? stripslashes_deep($params['assign_to']) : null;
+        $meta      = isset($params['meta']) ? stripslashes_deep($params['meta']) : null;
         $scheduled_at = isset($params['scheduled_at']) ? sanitize_text_field($params['scheduled_at']) : null;
         $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
         $completed_at = isset($params['completed_at']) ? sanitize_text_field($params['completed_at']) : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
 
-        $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : [];
-        $coupons = isset($params['coupons']) ? stripslashes_deep($params['coupons']) : [];
+        $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : null;
+        $coupons = isset($params['coupons']) ? stripslashes_deep($params['coupons']) : null;
 
-        error_log("Updating order with ID: $scheduled_at");
 
 
         // ✅ Data to update
@@ -825,164 +830,246 @@ class ComboStoreOrders
             'shipping_city'   => $shipping_city,
             'shipping_country' => $shipping_country,
             'assign_to' => wp_json_encode($assign_to),
+            'meta' => wp_json_encode($meta),
             'scheduled_at'      => $scheduled_at,
             'created_at'      => $created_at,
             'updated_at'      => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
         );
 
-        // ✅ Format mapping
-        $format = array(
-            '%d',   // user_id
-            '%s',   // status
-            '%s',   // currency
-            '%f',   // total_amount
-            '%f',   // subtotal_amount
-            '%f',   // discount_amount
-            '%f',   // tax_amount
-            '%f',   // shipping_amount
-            '%f',   // advance_payment
-            '%f',   // trade_price
-            '%f',   // gross_profit
-            '%f',   // net_profit
-            '%s',   // payment_method
-            '%s',   // payment_status
-            '%s',   // transaction_id
-            '%s',   // shipping_method
-            '%s',   // billing_name
-            '%s',   // billing_email
-            '%s',   // billing_phone
-            '%s',   // billing_address
-            '%s',   // billing_city
-            '%s',   // billing_country
-            '%s',   // shipping_name
-            '%s',   // shipping_phone
-            '%s',   // shipping_address
-            '%s',   // shipping_city
-            '%s',   // shipping_country
-            '%s',   // assign_to
-            '%s',   // scheduled_at
-            '%s',   // created_at
-            '%s',   // updated_at
+        // // ✅ Format mapping
+        // $format = array(
+        //     '%d',   // user_id
+        //     '%s',   // status
+        //     '%s',   // currency
+        //     '%f',   // total_amount
+        //     '%f',   // subtotal_amount
+        //     '%f',   // discount_amount
+        //     '%f',   // tax_amount
+        //     '%f',   // shipping_amount
+        //     '%f',   // advance_payment
+        //     '%f',   // trade_price
+        //     '%f',   // gross_profit
+        //     '%f',   // net_profit
+        //     '%s',   // payment_method
+        //     '%s',   // payment_status
+        //     '%s',   // transaction_id
+        //     '%s',   // shipping_method
+        //     '%s',   // billing_name
+        //     '%s',   // billing_email
+        //     '%s',   // billing_phone
+        //     '%s',   // billing_address
+        //     '%s',   // billing_city
+        //     '%s',   // billing_country
+        //     '%s',   // shipping_name
+        //     '%s',   // shipping_phone
+        //     '%s',   // shipping_address
+        //     '%s',   // shipping_city
+        //     '%s',   // shipping_country
+        //     '%s',   // assign_to
+        //     '%s',   // meta
+        //     '%s',   // scheduled_at
+        //     '%s',   // created_at
+        //     '%s',   // updated_at
+        // );
+
+
+        // Format map
+        $format_map = array(
+            'userid'         => '%d',
+            'status'         => '%s',
+            'currency'       => '%s',
+            'total_amount'   => '%f',
+            'subtotal_amount' => '%f',
+            'discount_amount' => '%f',
+            'tax_amount'     => '%f',
+            'shipping_amount' => '%f',
+            'advance_payment' => '%f',
+            'trade_price' => '%f',
+            'gross_profit' => '%f',
+            'net_profit' => '%f',
+            'payment_method' => '%s',
+            'payment_status' => '%s',
+            'transaction_id' => '%s',
+            'shipping_method' => '%s',
+            'billing_name'   => '%s',
+            'billing_email'  => '%s',
+            'billing_phone'  => '%s',
+            'billing_address' => '%s',
+            'shipping_name'  => '%s',
+            'shipping_phone' => '%s',
+            'shipping_address' => '%s',
+            'assign_to'     => '%s',
+            'meta'     => '%s',
+            'scheduled_at'     => '%s',
+            'created_at'     => '%s',
+            'updated_at'     => '%s',
         );
+
+        // Filter only non-empty values
+        $filtered_data   = array();
+        $filtered_format = array();
+
+
+
+        foreach ($data as $key => $value) {
+
+            // Skip NULL or empty string
+            if ($value !== 0 && $value !== null && $value !== '') {
+
+                $filtered_data[$key]   = $value;
+                $filtered_format[]     = isset($format_map[$key]) ? $format_map[$key] : '';
+            }
+        }
+
+
 
         // ✅ WHERE clause
         $where = array('id' => $order_id);
         $where_format = array('%d');
 
-        // ✅ Perform update
-        $updated = $wpdb->update($table, $data, $where, $format, $where_format);
-
-
-        $action_prams = array_merge($data, ["order_id" => $order_id, "billing_name" => $billing_name, "total_amount" => $total_amount, "payment_method" => $payment_method, 'billing_email' => $billing_email],);
 
 
 
-
-        if ($updated) {
-            $responses['success'] = true;
-            $ComboStoreObjectMeta = new ComboStoreObjectMeta();
-
-            if ($advance_payment_note) {
-                $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
-            }
-            if ($coupons) {
-                $ComboStoreObjectMeta->update_meta('orders', $order_id, "coupons", $coupons);
-            }
-            if ($scheduled_at) {
-                $ComboStoreObjectMeta->update_meta('orders', $order_id, "scheduled_at", $scheduled_at);
-            }
-
-
-
-            if ($status == 'completed') {
-                foreach ($lineItems as $lineItem) {
-                    $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
-                    $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
-
-                    $stockStatus = get_post_meta($product_id, 'stockStatus', true);
-
-                    if ($stockStatus == 'outofstock') {
-                        $responses['success'] = false;
-                        $responses['message'] = "Insufficient stock for product ID: $product_id";
-
-                        return $responses;
-                    }
-
-                    if ($stockStatus == 'instock') {
-                        $stockCount = intval(get_post_meta($product_id, 'stockCount', true));
+        // Run update only if data exists
+        if (!empty($filtered_data)) {
+            $updated = $wpdb->update(
+                $table,
+                $filtered_data,
+                $where,
+                $filtered_format,
+                $where_format
+            );
 
 
 
 
-                        $stockCount = $stockCount - $quantity;
 
 
 
-                        if ($stockCount < 0) {
+            // ✅ Perform update
+            // $updated = $wpdb->update($table, $data, $where, $format, $where_format);
+
+
+            $action_prams = array_merge($data, ["order_id" => $order_id, "billing_name" => $billing_name, "total_amount" => $total_amount, "payment_method" => $payment_method, 'billing_email' => $billing_email],);
+
+
+
+
+            if ($updated) {
+                $responses['success'] = true;
+                $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+
+                if ($advance_payment_note) {
+                    $ComboStoreObjectMeta->update_meta('orders', $order_id, "advance_payment_note", $advance_payment_note);
+                }
+                if ($coupons) {
+                    $ComboStoreObjectMeta->update_meta('orders', $order_id, "coupons", $coupons);
+                }
+                if ($scheduled_at) {
+                    $ComboStoreObjectMeta->update_meta('orders', $order_id, "scheduled_at", $scheduled_at);
+                }
+
+
+
+                if ($status == 'completed') {
+                    foreach ($lineItems as $lineItem) {
+                        $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
+                        $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
+
+                        $stock_status = get_post_meta($product_id, 'stock_status', true);
+
+                        if ($stock_status == 'outofstock') {
                             $responses['success'] = false;
                             $responses['message'] = "Insufficient stock for product ID: $product_id";
-                            $stockCount = 0;
+
+                            return $responses;
                         }
 
-                        $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
+                        if ($stock_status == 'instock') {
+                            $stock_count = intval(get_post_meta($product_id, 'stock_count', true));
 
 
-                        if (!$stock_updated) {
-                            update_post_meta($product_id, 'stockCount', $stockCount);
 
-                            if ($stockCount == 0) {
-                                update_post_meta($product_id, 'stockStatus', 'outofstock');
+
+                            $stock_count = $stock_count - $quantity;
+
+
+
+                            if ($stock_count < 0) {
+                                $responses['success'] = false;
+                                $responses['message'] = "Insufficient stock for product ID: $product_id";
+                                $stock_count = 0;
                             }
 
-                            $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
+                            $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
 
-                            if ($stockCount < 5) {
-                                do_action("combo_store_low_stock", $product_id);
+
+                            if (!$stock_updated) {
+                                update_post_meta($product_id, 'stock_count', $stock_count);
+
+                                if ($stock_count == 0) {
+                                    update_post_meta($product_id, 'stock_status', 'outofstock');
+                                }
+
+                                $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
+
+                                if ($stock_count < 5) {
+                                    do_action("combo_store_low_stock", $product_id);
+                                }
                             }
                         }
                     }
+
+
+
+
+
+
+
+                    // ✅ Data to update
+                    $data = array(
+                        'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
+                    );
+
+                    // ✅ Format mapping
+                    $format = array(
+                        '%s'    // completed_at
+                    );
+
+                    // ✅ WHERE clause
+                    $where = array('id' => $order_id);
+                    $where_format = array('%d');
+
+                    // ✅ Perform update
+                    $updated = $wpdb->update($table, $data, $where, $format, $where_format);
                 }
 
 
 
 
 
+                $prams = [
+                    "order_id" => $order_id,
+                    "cartItems" => $lineItems,
+                ];
 
+                $this->update_order_items($prams);
 
-                // ✅ Data to update
-                $data = array(
-                    'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
-                );
-
-                // ✅ Format mapping
-                $format = array(
-                    '%s'    // completed_at
-                );
-
-                // ✅ WHERE clause
-                $where = array('id' => $order_id);
-                $where_format = array('%d');
-
-                // ✅ Perform update
-                $updated = $wpdb->update($table, $data, $where, $format, $where_format);
+                do_action("combo_store_order_updated", $action_prams);
+            } else {
+                $responses['success'] = false;
+                do_action("combo_store_order_update_failed", $action_prams);
             }
-
-
-
-
-
-            $prams = [
-                "order_id" => $order_id,
-                "cartItems" => $lineItems,
-            ];
-
-            $this->update_order_items($prams);
-
-            do_action("combo_store_order_updated", $action_prams);
-        } else {
-            $responses['success'] = false;
-            do_action("combo_store_order_update_failed", $action_prams);
         }
+
+
+
+
+
+
+
+
+
         return $responses;
     }
 
@@ -1032,10 +1119,12 @@ class ComboStoreOrders
         $gross_profit = isset($params['gross_profit']) ? floatval($params['gross_profit']) : null;
         $net_profit = isset($params['net_profit']) ? floatval($params['net_profit']) : null;
         $scheduled_at = isset($params['scheduled_at']) ? sanitize_text_field($params['scheduled_at']) : null;
+        $assign_to = isset($params['assign_to']) ? stripslashes_deep($params['assign_to']) : null;
+        $meta = isset($params['meta']) ? stripslashes_deep($params['meta']) : null;
         $created_at = isset($params['created_at']) ? sanitize_text_field($params['created_at']) : null;
         $completed_at = isset($params['completed_at']) ? sanitize_text_field($params['completed_at']) : null;
 
-        $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : [];
+        $lineItems = isset($params['lineItems']) ? stripslashes_deep($params['lineItems']) : null;
 
 
 
@@ -1064,6 +1153,8 @@ class ComboStoreOrders
             'shipping_name'  => $shipping_name,
             'shipping_phone' => $shipping_phone,
             'shipping_address' => $shipping_address,
+            'assign_to'     => wp_json_encode($assign_to),
+            'meta'     => wp_json_encode($meta),
             'scheduled_at'     => $scheduled_at,
             'created_at'     => $created_at,
             'updated_at'     => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
@@ -1094,6 +1185,8 @@ class ComboStoreOrders
             'shipping_name'  => '%s',
             'shipping_phone' => '%s',
             'shipping_address' => '%s',
+            'assign_to'     => '%s',
+            'meta'     => '%s',
             'scheduled_at'     => '%s',
             'created_at'     => '%s',
             'updated_at'     => '%s',
@@ -1147,26 +1240,29 @@ class ComboStoreOrders
                         foreach ($lineItems as $lineItem) {
                             $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
                             $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
+                            $ComboStoreProduct = new ComboStoreProduct();
 
-                            $stockStatus = get_post_meta($product_id, 'stockStatus', true);
+                            $product_data = $ComboStoreProduct->get_product(['product_id' => $product_id]);
 
-                            if ($stockStatus == 'instock') {
-                                $stockCount = intval(get_post_meta($product_id, 'stockCount', true));
+                            $stock_status = get_post_meta($product_id, 'stock_status', true);
 
-                                $stockCount = $stockCount - $quantity;
-                                if ($stockCount < 0) {
-                                    $stockCount = 0;
+                            if ($stock_status == 'instock') {
+                                $stock_count = intval(get_post_meta($product_id, 'stock_count', true));
+
+                                $stock_count = $stock_count - $quantity;
+                                if ($stock_count < 0) {
+                                    $stock_count = 0;
                                 }
 
                                 $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
 
 
                                 if (!$stock_updated) {
-                                    update_post_meta($product_id, 'stockCount', $stockCount);
+                                    update_post_meta($product_id, 'stock_count', $stock_count);
 
                                     $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
 
-                                    if ($stockCount < 5) {
+                                    if ($stock_count < 5) {
                                         do_action("combo_store_low_stock", $product_id);
                                     }
                                 }
@@ -1236,12 +1332,19 @@ class ComboStoreOrders
         $order_id = isset($prams['order_id']) ? $prams['order_id'] : '';
 
 
+        error_log(wp_json_encode($cartItems));
+
+
+
+
+
         global $wpdb;
         $table = $wpdb->prefix . "cstore_order_items";
 
         foreach ($cartItems as $cartItem) {
             $product_id    = isset($cartItem['id']) ? intval($cartItem['id']) : 0;
-            $product_name  = isset($cartItem['product_name']) ? sanitize_text_field($cartItem['product_name']) : '';
+            $variation_id    = isset($cartItem['variation_id']) ? intval($cartItem['variation_id']) : 0;
+            $product_name  = isset($cartItem['title']) ? sanitize_text_field($cartItem['title']) : '';
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
             $price         = isset($cartItem['price']) ? floatval($cartItem['price']) : 0.00;
@@ -1251,12 +1354,14 @@ class ComboStoreOrders
             $discount_type = isset($cartItem['discount_type']) ? sanitize_text_field($cartItem['discount_type']) : '';
             $discount_amount = isset($cartItem['discount_amount']) ? floatval($cartItem['discount_amount']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
+            $attributes          = isset($cartItem['attributes']) ? wp_json_encode($cartItem['attributes']) : null;
             $meta          = isset($cartItem['meta']) ? wp_json_encode($cartItem['meta']) : null;
 
             // Insert data
             $data = array(
                 'order_id'     => $order_id,
                 'product_id'   => $product_id,
+                'variation_id'   => $variation_id,
                 'product_name' => $product_name,
                 'sku'          => $sku,
                 'quantity'     => $quantity,
@@ -1267,12 +1372,14 @@ class ComboStoreOrders
                 'discount_type' => $discount_type,
                 'discount_amount' => $discount_amount,
                 'total'        => $total,
+                'attributes'         => $attributes,
                 'meta'         => $meta
             );
 
             $format = array(
                 '%d', // order_id
                 '%d', // product_id
+                '%d', // variation_id
                 '%s', // product_name
                 '%s', // sku
                 '%d', // quantity
@@ -1283,6 +1390,7 @@ class ComboStoreOrders
                 '%f', // discount_amount
                 '%f', // tax
                 '%f', // total
+                '%s',  // attributes (JSON string)
                 '%s'  // meta (JSON string)
             );
 
@@ -1327,6 +1435,7 @@ class ComboStoreOrders
 
         foreach ($cartItems as $cartItem) {
             $product_id    = isset($cartItem['product_id']) ? intval($cartItem['product_id']) : 0;
+            $variation_id    = isset($cartItem['variation_id']) ? intval($cartItem['variation_id']) : 0;
             $product_name  = isset($cartItem['product_name']) ? sanitize_text_field($cartItem['product_name']) : '';
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;
@@ -1337,6 +1446,7 @@ class ComboStoreOrders
             $discount_type = isset($cartItem['discount_type']) ? sanitize_text_field($cartItem['discount_type']) : '';
             $discount_amount = isset($cartItem['discount_amount']) ? floatval($cartItem['discount_amount']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
+            $attributes          = isset($cartItem['attributes']) ? wp_json_encode($cartItem['attributes']) : null;
             $meta          = isset($cartItem['meta']) ? wp_json_encode($cartItem['meta']) : null;
 
 
@@ -1346,6 +1456,7 @@ class ComboStoreOrders
             $data = array(
                 'order_id'     => $order_id,
                 'product_id'   => $product_id,
+                'variation_id'   => $variation_id,
                 'product_name' => $product_name,
                 'sku'          => $sku,
                 'quantity'     => $quantity,
@@ -1356,12 +1467,14 @@ class ComboStoreOrders
                 'discount_type' => $discount_type,
                 'discount_amount' => $discount_amount,
                 'total'        => $total,
+                'attributes'         => $attributes,
                 'meta'         => $meta
             );
 
             $format = array(
                 '%d', // order_id
                 '%d', // product_id
+                '%d', // variation_id
                 '%s', // product_name
                 '%s', // sku
                 '%d', // quantity
@@ -1372,6 +1485,7 @@ class ComboStoreOrders
                 '%s', // discount_type
                 '%f', // discount_amount
                 '%f', // total
+                '%s',  // attributes (JSON string)
                 '%s'  // meta (JSON string)
             );
 
@@ -1546,6 +1660,7 @@ class ComboStoreOrders
 
         foreach ($order_items as $key => $entry) {
 
+            $attributes = isset($entry->attributes) ? $entry->attributes : null;
             $product_name = isset($entry->product_name) ? $entry->product_name : '';
             $product_id = isset($entry->product_id) ? $entry->product_id : '';
 
@@ -1554,6 +1669,12 @@ class ComboStoreOrders
             }
 
             $order_items[$key]->product_name = $product_name;
+
+            if ($attributes) {
+                $attributes = json_decode($attributes, true);
+
+                $order_items[$key]->attributes = $attributes;
+            }
         }
 
 
