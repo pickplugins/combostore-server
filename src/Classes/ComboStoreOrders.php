@@ -476,8 +476,11 @@ class ComboStoreOrders
                 $where_sql
                 ORDER BY created_at $order
             ";
-            $filter_params = [];
-            $filter_params[] = $status;
+            /* The list's own values without its LIMIT pair. Only $status used to be
+               passed, so any other filter (customer, payment, dates, product) was
+               counted against the wrong values: a customer's orders were counted
+               as the orders with no customer at all. */
+            $filter_params = array_slice($params, 0, -2);
 
 
 
@@ -578,8 +581,11 @@ class ComboStoreOrders
                 $where_sql
                 ORDER BY created_at $order
             ";
-            $filter_params = [];
-            $filter_params[] = $status;
+            /* The list's own values without its LIMIT pair. Only $status used to be
+               passed, so any other filter (customer, payment, dates, product) was
+               counted against the wrong values: a customer's orders were counted
+               as the orders with no customer at all. */
+            $filter_params = array_slice($params, 0, -2);
 
 
 
@@ -674,8 +680,11 @@ class ComboStoreOrders
                 $where_sql
                 ORDER BY created_at $order
             ";
-            $filter_params = [];
-            $filter_params[] = $status;
+            /* The list's own values without its LIMIT pair. Only $status used to be
+               passed, so any other filter (customer, payment, dates, product) was
+               counted against the wrong values: a customer's orders were counted
+               as the orders with no customer at all. */
+            $filter_params = array_slice($params, 0, -2);
 
 
 
@@ -972,61 +981,11 @@ class ComboStoreOrders
 
 
                 if ($status == 'completed') {
-                    foreach ($lineItems as $lineItem) {
-                        $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
-                        $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
+                    /* Stock is taken out further down, once the items are saved (see the
+                       helper). This looped over the request's items, wrote the old post-meta
+                       stock, stopped after the first product, and on "out of stock" returned
+                       before the items were saved - leaving the order half-updated. */
 
-                        $stock_status = get_post_meta($product_id, 'stock_status', true);
-
-                        if ($stock_status == 'outofstock') {
-                            $responses['success'] = false;
-                            $responses['message'] = "Insufficient stock for product ID: $product_id";
-
-                            return $responses;
-                        }
-
-                        if ($stock_status == 'instock') {
-                            $stock_count = intval(get_post_meta($product_id, 'stock_count', true));
-
-
-
-
-                            $stock_count = $stock_count - $quantity;
-
-
-
-                            if ($stock_count < 0) {
-                                $responses['success'] = false;
-                                $responses['message'] = "Insufficient stock for product ID: $product_id";
-                                $stock_count = 0;
-                            }
-
-                            $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
-
-
-                            if (!$stock_updated) {
-                                update_post_meta($product_id, 'stock_count', $stock_count);
-
-                                if ($stock_count == 0) {
-                                    update_post_meta($product_id, 'stock_status', 'outofstock');
-                                }
-
-                                $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
-
-                                if ($stock_count < 5) {
-                                    do_action("combo_store_low_stock", $product_id);
-                                }
-                            }
-                        }
-                    }
-
-
-
-
-
-
-
-                    // ✅ Data to update
                     $data = array(
                         'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
                     );
@@ -1055,6 +1014,27 @@ class ComboStoreOrders
 
                 $this->update_order_items($prams);
 
+                /* After the items are saved, so it counts what was just stored. */
+                if ($status == 'completed') {
+                    $stock = $this->reduce_stock_for_completed_order($order_id);
+
+                    if (!empty($stock['skipped'])) {
+                        $responses['stock_notes'] = $stock['skipped'];
+                    }
+                }
+
+                /* A refund puts back what completing the order took out. */
+                if ($status == 'refunded') {
+                    $restock = $this->restock_for_refunded_order($order_id);
+                    $notes = array();
+
+                    if ($restock['restocked'] > 0) {
+                        $notes[] = "{$restock['units']} item(s) put back in stock.";
+                    }
+
+                    $responses['stock_notes'] = array_merge($notes, $restock['skipped']);
+                }
+
                 do_action("combo_store_order_updated", $action_prams);
             } else {
                 $responses['success'] = false;
@@ -1078,6 +1058,245 @@ class ComboStoreOrders
 
 
 
+    /**
+     * The order's current stock cycle. A refund ends a cycle, so an order that
+     * is completed again afterwards is deducted again. Cycle 1 keeps the plain
+     * "...-completed" event ids the adjustment report and script use.
+     *
+     * @param int $order_id
+     * @return int
+     */
+    function stock_cycle($order_id)
+    {
+        $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+
+        return max(1, (int) $ComboStoreObjectMeta->get_meta('orders', absint($order_id), 'stock_cycle'));
+    }
+
+    /**
+     * Put a refunded order's items back in stock - only what its completion
+     * actually took out, and only once.
+     *
+     * Reads the order's "sale" entries in stock history for the current cycle
+     * (so a line that ran short gets back only what was taken, and the 0-unit
+     * "already counted" marks of the adjustment script get nothing), and adds
+     * each back through ComboStoreStocks::update_stock with its own
+     * "...-refunded" event id, which update_stock refuses to record twice.
+     * Then the cycle ends: the "stock updated" flag is cleared, so completing
+     * the order again deducts again.
+     *
+     * @param int $order_id
+     * @return array { restocked: int, units: int, skipped: string[] }
+     */
+    function restock_for_refunded_order($order_id)
+    {
+        global $wpdb;
+        $prefix   = $wpdb->prefix;
+        $order_id = absint($order_id);
+        $summary  = array('restocked' => 0, 'units' => 0, 'skipped' => array());
+
+        if (!$order_id) {
+            return $summary;
+        }
+
+        $cycle     = $this->stock_cycle($order_id);
+        $completed = $cycle > 1 ? "-completed-{$cycle}" : '-completed';
+        $refunded  = $cycle > 1 ? "-refunded-{$cycle}" : '-refunded';
+
+        $sales = $wpdb->get_results($wpdb->prepare(
+            "SELECT event_id, product_id, variation_id, quantity
+             FROM {$prefix}cstore_stock_history
+             WHERE reference_type = 'order' AND reference_id = %d
+               AND event_type = 'sale' AND quantity > 0
+               AND event_id LIKE %s",
+            $order_id,
+            $wpdb->esc_like("order-{$order_id}-item-") . '%' . $wpdb->esc_like($completed)
+        ), ARRAY_A);
+
+        /* Nothing was taken out in this cycle: nothing to give back, and the cycle stays open. */
+        if (empty($sales)) {
+            return $summary;
+        }
+
+        $ComboStoreStocks = new ComboStoreStocks();
+        $failed = false;
+
+        foreach ($sales as $sale) {
+            /* The exact suffix: "-completed" must not also match "-completed-2". */
+            if (!preg_match('/^order-' . $order_id . '-item-(\d+)' . preg_quote($completed, '/') . '$/', $sale['event_id'], $m)) {
+                continue;
+            }
+
+            $line_id  = (int) $m[1];
+            $quantity = (int) round((float) $sale['quantity']);
+
+            $result = $ComboStoreStocks->update_stock(array(
+                'product_id'     => (int) $sale['product_id'],   // post id, as recorded by the sale
+                'variation_id'   => (int) $sale['variation_id'],
+                'action'         => 'increase',
+                'quantity'       => $quantity,
+                'event_type'     => 'return',
+                'reference_type' => 'order',
+                'reference_id'   => $order_id,
+                'event_id'       => "order-{$order_id}-item-{$line_id}{$refunded}",
+                'note'           => "Order #{$order_id} refunded",
+            ));
+
+            if (isset($result['status']) && $result['status'] === 'success') {
+                $summary['restocked']++;
+                $summary['units'] += $quantity;
+            } elseif (isset($result['message']) && strpos($result['message'], 'already been recorded') !== false) {
+                /* Put back before; nothing to do. */
+            } else {
+                $failed = true;
+                $summary['skipped'][] = "Product {$sale['product_id']}: " . (isset($result['message']) ? $result['message'] : 'not restocked.');
+            }
+        }
+
+        /* Close the cycle only when every line is back, so a failed line is retried next time. */
+        if (!$failed) {
+            $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+            $ComboStoreObjectMeta->update_meta('orders', $order_id, 'stock_cycle', $cycle + 1);
+            $ComboStoreObjectMeta->delete_meta('orders', $order_id, 'stock_updated');
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Take a completed order's items out of stock, once.
+     *
+     * Product stock lives in cstore_products / cstore_products_variations and
+     * is changed through ComboStoreStocks::update_stock, which records stock
+     * history. The completion code used to write the old post meta
+     * (`stock_count` on the cmb_product post), which no real product uses any
+     * more, and it set the order's "stock_updated" flag after the first item,
+     * so on a multi-item order only one product was ever touched.
+     *
+     *  - Reads the order's own lines from cstore_order_items (not anything the
+     *    request sent).
+     *  - Only products (or variations) that track stock - stock_status
+     *    "instock" - are reduced; untracked ones are left alone.
+     *  - Never below zero: a shortfall takes what is left and is reported.
+     *  - Each line has its own event id, so it can never be counted twice, and
+     *    the order is flagged once every line has been handled.
+     *
+     * @param int $order_id
+     * @return array { reduced: int, skipped: string[], already: bool }
+     */
+    function reduce_stock_for_completed_order($order_id)
+    {
+        global $wpdb;
+        $prefix   = $wpdb->prefix;
+        $order_id = absint($order_id);
+        $summary  = array('reduced' => 0, 'skipped' => array(), 'already' => false);
+        $failed   = false;
+
+        if (!$order_id) {
+            return $summary;
+        }
+
+        $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+
+        if ($ComboStoreObjectMeta->get_meta('orders', $order_id, 'stock_updated')) {
+            $summary['already'] = true;
+            return $summary;
+        }
+
+        $items = $wpdb->get_results(
+            $wpdb->prepare("SELECT id, product_id, variation_id, quantity FROM {$prefix}cstore_order_items WHERE order_id = %d", $order_id),
+            ARRAY_A
+        );
+
+        $ComboStoreStocks = new ComboStoreStocks();
+        $cycle = $this->stock_cycle($order_id);
+
+        foreach ((array) $items as $item) {
+            $post_id      = absint($item['product_id']);
+            $variation_id = absint($item['variation_id']);
+            $quantity     = max(0, (int) $item['quantity']);
+
+            if (!$post_id || !$quantity) {
+                continue;
+            }
+
+            /* Order lines hold the product's post id; stock is on its cstore_products row. */
+            $product = $wpdb->get_row(
+                $wpdb->prepare("SELECT id, stock_status, stock_count FROM {$prefix}cstore_products WHERE product_id = %d LIMIT 1", $post_id),
+                ARRAY_A
+            );
+
+            if (!$product) {
+                continue; // a custom line, or a product that no longer exists
+            }
+
+            $row = $product;
+
+            if ($variation_id) {
+                $row = $wpdb->get_row(
+                    $wpdb->prepare("SELECT id, stock_status, stock_count FROM {$prefix}cstore_products_variations WHERE id = %d", $variation_id),
+                    ARRAY_A
+                );
+
+                if (!$row) {
+                    $summary['skipped'][] = "Line {$item['id']}: variation {$variation_id} no longer exists.";
+                    continue;
+                }
+            }
+
+            if ($row['stock_status'] !== 'instock') {
+                continue; // stock not tracked for this product
+            }
+
+            $available = max(0, (int) $row['stock_count']);
+            $take      = min($quantity, $available);
+
+            if ($take < $quantity) {
+                $summary['skipped'][] = "Product {$post_id}: {$quantity} ordered, only {$available} in stock.";
+            }
+
+            if ($take <= 0) {
+                continue;
+            }
+
+            /* update_stock finds products by post id (cstore_products.product_id),
+               whatever its docblock says about the row id. */
+            $result = $ComboStoreStocks->update_stock(array(
+                'product_id'     => $post_id,
+                'variation_id'   => $variation_id ? (int) $row['id'] : 0,
+                'action'         => 'decrease',
+                'quantity'       => $take,
+                'event_type'     => 'sale',
+                'reference_type' => 'order',
+                'reference_id'   => $order_id,
+                /* Cycle 1 keeps the plain id; after a refund the order deducts again under -completed-N. */
+                'event_id'       => "order-{$order_id}-item-{$item['id']}" . ($cycle > 1 ? "-completed-{$cycle}" : '-completed'),
+                'note'           => "Order #{$order_id} completed",
+            ));
+
+            if (isset($result['status']) && $result['status'] === 'success') {
+                $summary['reduced']++;
+
+                if (isset($result['stock_after']) && (int) $result['stock_after'] < 5) {
+                    do_action('combo_store_low_stock', $post_id);
+                }
+            } elseif (isset($result['message']) && strpos($result['message'], 'already been recorded') !== false) {
+                /* This line was taken out of stock before; nothing to do. */
+            } else {
+                $failed = true;
+                $summary['skipped'][] = "Product {$post_id}: " . (isset($result['message']) ? $result['message'] : 'not updated.');
+            }
+        }
+
+        /* Left unset after a real failure, so completing again retries; the
+           per-line event ids keep lines that did go through from counting twice. */
+        if (!$failed) {
+            $ComboStoreObjectMeta->update_meta('orders', $order_id, 'stock_updated', 1);
+        }
+
+        return $summary;
+    }
+
     function bulk_update_orders($params)
     {
 
@@ -1087,7 +1306,7 @@ class ComboStoreOrders
 
 
         // ✅ Extract variables safely (example fields you may want to update)
-        $order_ids      = isset($params['ids']) ? ($params['ids']) : [];
+        $order_ids      = isset($params['ids']) && is_array($params['ids']) ? array_filter(array_map('absint', $params['ids'])) : [];
         $user_id      = isset($params['userid']) ? intval($params['userid']) : null;
         $status               = isset($params['status']) ? sanitize_text_field($params['status']) : null;
         $currency               = isset($params['currency']) ? sanitize_text_field($params['currency']) : "";
@@ -1153,8 +1372,12 @@ class ComboStoreOrders
             'shipping_name'  => $shipping_name,
             'shipping_phone' => $shipping_phone,
             'shipping_address' => $shipping_address,
-            'assign_to'     => wp_json_encode($assign_to),
-            'meta'     => wp_json_encode($meta),
+            /* Encoded only when sent. wp_json_encode(null) is the string "null",
+               which got past the empty-value filter below, so every bulk update -
+               the panel never sends these - wiped the orders' assigned managers
+               and meta. */
+            'assign_to'     => $assign_to !== null ? wp_json_encode($assign_to) : null,
+            'meta'     => $meta !== null ? wp_json_encode($meta) : null,
             'scheduled_at'     => $scheduled_at,
             'created_at'     => $created_at,
             'updated_at'     => get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s'),
@@ -1208,6 +1431,8 @@ class ComboStoreOrders
 
 
 
+        $response['updated'] = 0;
+
         foreach ($order_ids as $order_id) {
 
             $where = array('id' => $order_id);
@@ -1227,6 +1452,7 @@ class ComboStoreOrders
 
                 if ($updated) {
                     $response['status'] = 'success';
+                    $response['updated']++;
 
                     $ComboStoreObjectMeta = new ComboStoreObjectMeta();
                     if (!empty($advance_payment_note)) {
@@ -1235,47 +1461,11 @@ class ComboStoreOrders
 
 
                     if ($status == 'completed') {
+                        /* From the order's own lines, through the stock tables (see the helper). This
+                           looped over $lineItems, which the Bulk Update panel never sends, so a bulk
+                           completion took nothing out of stock. */
+                        $this->reduce_stock_for_completed_order($order_id);
 
-
-                        foreach ($lineItems as $lineItem) {
-                            $product_id = isset($lineItem['product_id']) ? intval($lineItem['product_id']) : 0;
-                            $quantity = isset($lineItem['quantity']) ? intval($lineItem['quantity']) : 1;
-                            $ComboStoreProduct = new ComboStoreProduct();
-
-                            $product_data = $ComboStoreProduct->get_product(['product_id' => $product_id]);
-
-                            $stock_status = get_post_meta($product_id, 'stock_status', true);
-
-                            if ($stock_status == 'instock') {
-                                $stock_count = intval(get_post_meta($product_id, 'stock_count', true));
-
-                                $stock_count = $stock_count - $quantity;
-                                if ($stock_count < 0) {
-                                    $stock_count = 0;
-                                }
-
-                                $stock_updated = $ComboStoreObjectMeta->get_meta('orders', $order_id, "stock_updated");
-
-
-                                if (!$stock_updated) {
-                                    update_post_meta($product_id, 'stock_count', $stock_count);
-
-                                    $ComboStoreObjectMeta->update_meta('orders', $order_id, "stock_updated", 1);
-
-                                    if ($stock_count < 5) {
-                                        do_action("combo_store_low_stock", $product_id);
-                                    }
-                                }
-                            }
-                        }
-
-
-
-
-
-
-
-                        // ✅ Data to update
                         $data = array(
                             'completed_at'      => $completed_at ? $completed_at : get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s')
                         );
@@ -1293,6 +1483,11 @@ class ComboStoreOrders
                         $updated = $wpdb->update($table, $data, $where, $format, $where_format);
                     }
 
+
+                    /* A refund puts back what completing the order took out. */
+                    if ($status == 'refunded') {
+                        $this->restock_for_refunded_order($order_id);
+                    }
 
                     if (!empty($lineItems)) {
                         $prams = [
@@ -1620,16 +1815,15 @@ class ComboStoreOrders
 
 
 
-            $response['success'] = true;
+            $response['success'] = $new_order_id > 0;
             $response['id'] = $new_order_id;
         } else {
             $response['success'] = false;
         }
 
 
-
-
-        $response['success'] = false;
+        /* A leftover "$response['success'] = false;" stood here and overwrote the
+           result, so every duplicate - including ones that worked - reported failure. */
 
         return $response;
     }

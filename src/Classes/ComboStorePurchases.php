@@ -4,6 +4,7 @@ namespace ComboStore\Classes;
 
 use Error;
 use ComboStore\Classes\ComboStoreObjectMeta;
+use ComboStore\Classes\ComboStoreStocks;
 use ComboStore\Classes\ComboStoreSubscriptions;
 use ComboStore\Classes\ComboStoreRegister;
 use DateTime;
@@ -223,6 +224,10 @@ class ComboStorePurchases
 
         $customer_id = isset($customer['id']) ? $customer['id'] : "";
 
+        /* Purchases have a supplier, not a customer: the list filters by supplier_id
+           (sent as supplier_id, or as the old customer.id). */
+        $supplier_id = isset($prams['supplier_id']) ? absint($prams['supplier_id']) : absint($customer_id);
+
 
         $from_date = isset($prams['from_date']) ? sanitize_text_field($prams['from_date']) : '';
         $to_date   = isset($prams['to_date']) ? sanitize_text_field($prams['to_date']) : '';
@@ -267,9 +272,11 @@ class ComboStorePurchases
                 $params[] = $payment_status;
             }
 
-            if (!empty($customer_id)) {
-                $where[]  = "userid = %s";
-                $params[] = $customer_id;
+            /* "userid = %s" named a column cstore_purchases does not have, so this
+               filter failed with a SQL error and the list came back empty. */
+            if (!empty($supplier_id)) {
+                $where[]  = "supplier_id = %d";
+                $params[] = $supplier_id;
             }
 
             if ($from_date && $to_date) {
@@ -282,7 +289,7 @@ class ComboStorePurchases
             if (!empty($product_id)) {
                 $where[] = "EXISTS (
                     SELECT 1 FROM {$table_purchases_items} oi
-                    WHERE oi.order_id = {$table_purchases}.id
+                    WHERE oi.purchase_id = {$table_purchases}.id
                     AND oi.product_id = %d
                 )";
 
@@ -314,13 +321,18 @@ class ComboStorePurchases
 
             $entries = $wpdb->get_results($query);
 
-
-            $total = count($entries);
+            /* Every matching purchase, not this page's rows (that made max_pages 1). */
+            $count_params = array_slice($params, 0, -2);
+            $count_sql = "SELECT COUNT(*) FROM $table_purchases $where_sql";
+            $total = (int) $wpdb->get_var(!empty($count_params) ? $wpdb->prepare($count_sql, $count_params) : $count_sql);
                                                                                             
 
         } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_purchases WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_purchases WHERE userid='$user_id'");
+            /* The creator is user_id; "userid" does not exist, so non-admins (store
+               managers) got a SQL error and an empty list. */
+            $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+            $entries = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table_purchases WHERE user_id = %d ORDER BY id $order LIMIT %d, %d", $user_id, $offset, $per_page));
+            $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM $table_purchases WHERE user_id = %d", $user_id));
         }
 
 
@@ -340,7 +352,7 @@ class ComboStorePurchases
         // Fix the total count query by removing the per_page clause
 
         // Calculate max pages
-        $max_pages = ceil($total / $per_page);
+        $max_pages = $per_page > 0 ? ceil($total / $per_page) : 1;
 
         $responses['total'] = (int)$total;
 
@@ -373,7 +385,8 @@ class ComboStorePurchases
         $tax_amount   = isset($params['tax_amount']) ? floatval($params['tax_amount']) : 0;
         $shipping_amount   = isset($params['shipping_amount']) ? floatval($params['shipping_amount']) : 0;
         $advance_payment   = isset($params['advance_payment']) ? floatval($params['advance_payment']) : 0;
-        $advance_payment_note   = isset($params['advance_payment_note']) ? floatval($params['advance_payment_note']) : '';
+        /* Text: floatval() turned a note such as "paid by bKash" into 0. */
+        $advance_payment_note   = isset($params['advance_payment_note']) ? sanitize_text_field($params['advance_payment_note']) : '';
             
         $payment_method = isset($params['payment_method']) ? sanitize_text_field($params['payment_method']) : '';
         $payment_status = isset($params['payment_status']) ? sanitize_text_field($params['payment_status']) : '';
@@ -462,6 +475,13 @@ class ComboStorePurchases
 
             $this->insert_purchase_items($prams);
 
+        /* Stock follows the purchase's status (see the helpers below). */
+        if ($purchase_id && $status === 'completed') {
+            $this->add_stock_for_completed_purchase($purchase_id);
+        } elseif ($purchase_id && in_array($status, array('cancelled', 'canceled', 'refunded'), true)) {
+            $this->remove_stock_for_cancelled_purchase($purchase_id);
+        }
+
 
 
 
@@ -484,6 +504,229 @@ class ComboStorePurchases
 
 
 
+    /**
+     * The purchase's current stock cycle. Cancelling or refunding a completed
+     * purchase ends a cycle, so completing it again adds its items again.
+     *
+     * @param int $purchase_id
+     * @return int
+     */
+    function stock_cycle($purchase_id)
+    {
+        $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+
+        return max(1, (int) $ComboStoreObjectMeta->get_meta('purchases', absint($purchase_id), 'stock_cycle'));
+    }
+
+    /**
+     * Whether this purchase already has a stock entry of the given kind for a
+     * product in the current cycle. By purchase and product, not by line:
+     * saving a purchase deletes and re-inserts its lines with new ids.
+     */
+    private function has_stock_event($purchase_id, $product_id, $kind, $cycle)
+    {
+        global $wpdb;
+        $suffix = $cycle > 1 ? "-{$kind}-{$cycle}" : "-{$kind}";
+
+        return (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$wpdb->prefix}cstore_stock_history
+             WHERE reference_type = 'purchase' AND reference_id = %d AND product_id = %d
+               AND event_id LIKE %s LIMIT 1",
+            $purchase_id,
+            $product_id,
+            $wpdb->esc_like("purchase-{$purchase_id}-item-") . '%' . $wpdb->esc_like($suffix)
+        ));
+    }
+
+    /**
+     * Add a completed purchase's items to stock, once.
+     *
+     * Purchases never touched stock: receiving goods meant adding them by hand
+     * on the Stocks screen. Each line goes through ComboStoreStocks::update_stock,
+     * so it is in stock history as a "purchase" at the line's price.
+     *
+     *  - Only products that track stock (in stock or out of stock); untracked
+     *    ones are skipped, since starting a count from just this delivery would
+     *    put a wrong number on the shelf.
+     *  - Variable products are skipped: purchase lines do not say which
+     *    variation, and the stock is on the variations.
+     *
+     * @param int $purchase_id
+     * @return array { added: int, units: int, skipped: string[] }
+     */
+    function add_stock_for_completed_purchase($purchase_id)
+    {
+        global $wpdb;
+        $prefix      = $wpdb->prefix;
+        $purchase_id = absint($purchase_id);
+        $summary     = array('added' => 0, 'units' => 0, 'skipped' => array());
+
+        if (!$purchase_id) {
+            return $summary;
+        }
+
+        $cycle = $this->stock_cycle($purchase_id);
+        $items = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, product_id, product_name, quantity, price FROM {$prefix}cstore_purchases_items WHERE purchase_id = %d ORDER BY id",
+            $purchase_id
+        ), ARRAY_A);
+
+        $ComboStoreStocks = new ComboStoreStocks();
+        $failed = false;
+        $seen = array();
+
+        foreach ((array) $items as $item) {
+            $post_id  = absint($item['product_id']);
+            $quantity = max(0, (int) round((float) $item['quantity']));
+
+            if (!$post_id || !$quantity) {
+                continue;
+            }
+
+            /* One product on two lines: both lines count, in the same pass. */
+            if (!isset($seen[$post_id]) && $this->has_stock_event($purchase_id, $post_id, 'received', $cycle)) {
+                continue; // already added in this cycle
+            }
+            $seen[$post_id] = true;
+
+            $product = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, stock_status FROM {$prefix}cstore_products WHERE product_id = %d LIMIT 1",
+                $post_id
+            ), ARRAY_A);
+
+            if (!$product) {
+                continue; // a custom line, or a product that no longer exists
+            }
+
+            /* Only real products: lines saved before the product-id fix point at row ids. */
+            if (get_post_type($post_id) !== 'cmb_product') {
+                $summary['skipped'][] = "{$item['product_name']}: the line is not linked to a product.";
+                continue;
+            }
+
+            if ($wpdb->get_var($wpdb->prepare("SELECT 1 FROM {$prefix}cstore_products_variations WHERE product_id = %d LIMIT 1", $post_id))) {
+                $summary['skipped'][] = "{$item['product_name']}: a variable product - add it to the right variation on the Stocks screen.";
+                continue;
+            }
+
+            if (!in_array($product['stock_status'], array('instock', 'outofstock'), true)) {
+                $summary['skipped'][] = "{$item['product_name']}: stock is not tracked for it.";
+                continue;
+            }
+
+            $suffix = $cycle > 1 ? "-received-{$cycle}" : '-received';
+
+            $result = $ComboStoreStocks->update_stock(array(
+                'product_id'     => $post_id,   // update_stock finds products by post id
+                'variation_id'   => 0,
+                'action'         => 'increase',
+                'quantity'       => $quantity,
+                'unit_cost'      => max(0, (float) $item['price']),
+                'event_type'     => 'purchase',
+                'reference_type' => 'purchase',
+                'reference_id'   => $purchase_id,
+                'event_id'       => "purchase-{$purchase_id}-item-{$item['id']}{$suffix}",
+                'note'           => "Purchase #{$purchase_id} completed",
+            ));
+
+            if (isset($result['status']) && $result['status'] === 'success') {
+                $summary['added']++;
+                $summary['units'] += $quantity;
+            } elseif (isset($result['message']) && strpos($result['message'], 'already been recorded') !== false) {
+                /* Added before; nothing to do. */
+            } else {
+                $failed = true;
+                $summary['skipped'][] = "{$item['product_name']}: " . (isset($result['message']) ? $result['message'] : 'not added.');
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Take back out what completing the purchase added, when it is cancelled
+     * or refunded - never below zero (what was sold since stays sold, and is
+     * reported) - and end the cycle so completing it again adds again.
+     *
+     * @param int $purchase_id
+     * @return array { removed: int, units: int, skipped: string[] }
+     */
+    function remove_stock_for_cancelled_purchase($purchase_id)
+    {
+        global $wpdb;
+        $prefix      = $wpdb->prefix;
+        $purchase_id = absint($purchase_id);
+        $summary     = array('removed' => 0, 'units' => 0, 'skipped' => array());
+
+        if (!$purchase_id) {
+            return $summary;
+        }
+
+        $cycle    = $this->stock_cycle($purchase_id);
+        $received = $cycle > 1 ? "-received-{$cycle}" : '-received';
+        $returned = $cycle > 1 ? "-returned-{$cycle}" : '-returned';
+
+        $entries = $wpdb->get_results($wpdb->prepare(
+            "SELECT event_id, product_id, quantity FROM {$prefix}cstore_stock_history
+             WHERE reference_type = 'purchase' AND reference_id = %d AND event_type = 'purchase'
+               AND quantity > 0 AND event_id LIKE %s",
+            $purchase_id,
+            $wpdb->esc_like("purchase-{$purchase_id}-item-") . '%' . $wpdb->esc_like($received)
+        ), ARRAY_A);
+
+        /* Nothing was added in this cycle: nothing to take back, and the cycle stays open. */
+        if (empty($entries)) {
+            return $summary;
+        }
+
+        $ComboStoreStocks = new ComboStoreStocks();
+        $failed = false;
+
+        foreach ($entries as $entry) {
+            if (!preg_match('/^purchase-' . $purchase_id . '-item-(\d+)' . preg_quote($received, '/') . '$/', $entry['event_id'], $m)) {
+                continue;
+            }
+
+            $post_id  = (int) $entry['product_id'];
+            $quantity = (int) round((float) $entry['quantity']);
+            $have     = (int) $wpdb->get_var($wpdb->prepare("SELECT stock_count FROM {$prefix}cstore_products WHERE product_id = %d LIMIT 1", $post_id));
+            $take     = min($quantity, max(0, $have));
+
+            if ($take < $quantity) {
+                $summary['skipped'][] = "Product {$post_id}: " . ($quantity - $take) . " of {$quantity} already sold, so not taken back.";
+            }
+
+            $result = $ComboStoreStocks->update_stock(array(
+                'product_id'     => $post_id,
+                'variation_id'   => 0,
+                'action'         => 'decrease',
+                'quantity'       => $take,
+                'event_type'     => 'purchase_return',
+                'reference_type' => 'purchase',
+                'reference_id'   => $purchase_id,
+                'event_id'       => "purchase-{$purchase_id}-item-{$m[1]}{$returned}",
+                'note'           => "Purchase #{$purchase_id} cancelled or refunded",
+            ));
+
+            if (isset($result['status']) && $result['status'] === 'success') {
+                $summary['removed']++;
+                $summary['units'] += $take;
+            } elseif (isset($result['message']) && strpos($result['message'], 'already been recorded') !== false) {
+                /* Taken back before; nothing to do. */
+            } else {
+                $failed = true;
+                $summary['skipped'][] = "Product {$post_id}: " . (isset($result['message']) ? $result['message'] : 'not taken back.');
+            }
+        }
+
+        if (!$failed) {
+            $ComboStoreObjectMeta = new ComboStoreObjectMeta();
+            $ComboStoreObjectMeta->update_meta('purchases', $purchase_id, 'stock_cycle', $cycle + 1);
+        }
+
+        return $summary;
+    }
+
     function insert_purchase_items($prams)
     {
 
@@ -503,7 +746,13 @@ class ComboStorePurchases
 
 
         foreach ($lineItems as $cartItem) {
-            $product_id    = isset($cartItem['id']) ? intval($cartItem['id']) : 0;
+            /*
+                The product is product_id - what every caller sends. This read
+                $cartItem['id'], which for a line loaded from the database is the
+                item row's own id and for a new line is missing, so every save
+                linked the lines to the wrong product, or to none.
+            */
+            $product_id    = isset($cartItem['product_id']) ? intval($cartItem['product_id']) : 0;
             $product_name  = isset($cartItem['product_name']) ? sanitize_text_field($cartItem['product_name']) : '';
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;

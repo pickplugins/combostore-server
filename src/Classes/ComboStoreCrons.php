@@ -542,7 +542,7 @@ Please do not add any other text and reference.
         );
 
         $query_args = array(
-            'post_type' => 'product',
+            'post_type' => 'cmb_product',
             'post_status' => 'draft',
             // 's' => "",
             'orderby' => 'date',
@@ -733,7 +733,7 @@ Automatically generate SEO keywords naturally based on the product type.
         );
 
         $query_args = array(
-            'post_type' => 'product',
+            'post_type' => 'cmb_product',
             'post_status' => 'draft',
             // 's' => "",
             'orderby' => 'date',

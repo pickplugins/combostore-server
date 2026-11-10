@@ -195,65 +195,103 @@ if($by == 'order_id'){
     function update_subscription($params)
     {
 
+        /*
+            Partial update: only fields present in $params change. Previously
+            every missing field was overwritten with a default (total_amount 0,
+            status ''), the format list was out of order (last_payment_date
+            saved as %d, i.e. "2026"), and next_billing_date was recomputed
+            from today on every save.
+
+            next_billing_date: an explicitly changed date wins; otherwise it is
+            recomputed only when the billing cycle (interval or count) changes.
+        */
         global $wpdb;
-        $prefix = $wpdb->prefix;
-        $table = $prefix . 'cstore_subscriptions';
+        $table = $wpdb->prefix . 'cstore_subscriptions';
 
-        // ✅ Extract variables safely (example fields you may want to update)
-        $subscription_id      = isset($params['id']) ? intval($params['id']) : 0;
-        $status               = isset($params['status']) ? sanitize_text_field($params['status']) : '';
-        $next_billing_date    = !empty($params['next_billing_date']) ? sanitize_text_field($params['next_billing_date']) : null;
-        $cancel_at_period_end = isset($params['cancel_at_period_end']) ? intval($params['cancel_at_period_end']) : 0;
-        $renewal_interval = isset($params['renewal_interval']) ? sanitize_text_field($params['renewal_interval']) : '';
-        $interval_count = isset($params['interval_count']) ? intval($params['interval_count']) : 0;
-        $last_payment_date    = !empty($params['last_payment_date']) ? sanitize_text_field($params['last_payment_date']) : null;
-        $total_amount  = isset($params['total_amount']) ? floatval($params['total_amount']) : 0.00;
-        $subtotal_amount  = isset($params['subtotal_amount']) ? floatval($params['subtotal_amount']) : 0.00;
-
-$next_billing_date = $this->get_next_billing_date('', $renewal_interval, $interval_count);
-
-
-
-        // ✅ Data to update
-        $data = array(
-            'status'              => $status,
-            'next_billing_date'   => $next_billing_date,
-            'cancel_at_period_end' => $cancel_at_period_end,
-            'renewal_interval' => $renewal_interval,
-            'interval_count' => $interval_count,
-            'last_payment_date'   => $last_payment_date,
-            'total_amount' => $total_amount,
-            'subtotal_amount' => $subtotal_amount,
-            'updated_at'          => current_time('mysql'),
-        );
-
-        // ✅ Format mapping
-        $format = array(
-            '%s',  // status
-            '%s',  // next_billing_date
-            '%d',  // cancel_at_period_end
-            '%s',  // last_payment_date
-            '%s',  // renewal_interval
-            '%d',  // interval_count
-            '%f',  // total_amount
-            '%f',  // subtotal_amount
-            '%s',  // updated_at
-        );
-
-        // ✅ WHERE clause
-        $where = array('id' => $subscription_id);
-        $where_format = array('%d');
-
-        // ✅ Perform update
-        $updated = $wpdb->update($table, $data, $where, $format, $where_format);
-
-
-        if ($updated) {
-            $response = true;
-        } else {
-            $response = true;
+        $subscription_id = isset($params['id']) ? intval($params['id']) : 0;
+        if (!$subscription_id) {
+            return false;
         }
-        return $response;
+
+        $current = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $subscription_id), ARRAY_A);
+        if (!$current) {
+            return false;
+        }
+
+        $valid_date = function ($value) {
+            $value = substr(sanitize_text_field((string) $value), 0, 10);
+            $d = DateTime::createFromFormat('Y-m-d', $value);
+            return ($d && $d->format('Y-m-d') === $value) ? $value : null;
+        };
+
+        $data = [];
+        $format = [];
+
+        if (isset($params['status']) && in_array($params['status'], ['active', 'paused', 'canceled', 'expired'], true)) {
+            $data['status'] = $params['status'];
+            $format[] = '%s';
+            /* Ending a subscription records when, if no end date is set yet. */
+            if (in_array($params['status'], ['canceled', 'expired'], true) && empty($current['end_date']) && !array_key_exists('end_date', $params)) {
+                $data['end_date'] = current_time('Y-m-d');
+                $format[] = '%s';
+            }
+        }
+        if (isset($params['renewal_interval']) && in_array($params['renewal_interval'], ['day', 'week', 'month', 'year'], true)) {
+            $data['renewal_interval'] = $params['renewal_interval'];
+            $format[] = '%s';
+        }
+        if (isset($params['interval_count'])) {
+            $data['interval_count'] = max(1, intval($params['interval_count']));
+            $format[] = '%d';
+        }
+        if (isset($params['cancel_at_period_end'])) {
+            $data['cancel_at_period_end'] = !empty($params['cancel_at_period_end']) && $params['cancel_at_period_end'] !== '0' ? 1 : 0;
+            $format[] = '%d';
+        }
+        foreach (['total_amount', 'subtotal_amount'] as $money) {
+            if (isset($params[$money]) && $params[$money] !== '') {
+                $data[$money] = max(0, floatval($params[$money]));
+                $format[] = '%f';
+            }
+        }
+        foreach (['last_payment_date', 'end_date', 'trial_end'] as $date_field) {
+            if (array_key_exists($date_field, $params)) {
+                $data[$date_field] = $params[$date_field] ? $valid_date($params[$date_field]) : null;
+                $format[] = '%s';
+            }
+        }
+
+        $requested_next = array_key_exists('next_billing_date', $params) && $params['next_billing_date']
+            ? $valid_date($params['next_billing_date'])
+            : null;
+        $cycle_changed = (isset($data['renewal_interval']) && $data['renewal_interval'] !== $current['renewal_interval'])
+            || (isset($data['interval_count']) && (int) $data['interval_count'] !== (int) $current['interval_count']);
+
+        if ($requested_next && $requested_next !== substr((string) $current['next_billing_date'], 0, 10)) {
+            $data['next_billing_date'] = $requested_next;
+            $format[] = '%s';
+        } elseif ($cycle_changed) {
+            /* From today in the store's timezone - an empty date makes the
+               helper use PHP's (UTC) clock, which can land a day early. */
+            $data['next_billing_date'] = $this->get_next_billing_date(
+                current_time('Y-m-d'),
+                $data['renewal_interval'] ?? $current['renewal_interval'],
+                $data['interval_count'] ?? $current['interval_count']
+            );
+            $format[] = '%s';
+        }
+
+        if (empty($data)) {
+            return true;
+        }
+
+        $data['updated_at'] = current_time('mysql');
+        $format[] = '%s';
+
+        $updated = $wpdb->update($table, $data, ['id' => $subscription_id], $format, ['%d']);
+
+        /* 0 rows changed is still success; false is a database error. */
+        return $updated !== false;
     }
 
     function get_orders($order_id)
@@ -333,6 +371,12 @@ function get_next_billing_date(
 
         case 'month':
             $date->add(new DateInterval("P{$intervalCount}M"));
+            break;
+
+        /* `year` is a valid renewal_interval in the table's enum but was
+           missing here, so saving a yearly subscription threw. */
+        case 'year':
+            $date->add(new DateInterval("P{$intervalCount}Y"));
             break;
 
         default:

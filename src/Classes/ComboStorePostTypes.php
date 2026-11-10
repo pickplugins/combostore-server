@@ -56,7 +56,7 @@ class ComboStorePostTypes
 			$not_found_in_trash = isset($productAttribute['not_found_in_trash']) ? $productAttribute['not_found_in_trash'] : sprintf("No %s found in trash", $plural);
 			$parent = isset($productAttribute['parent']) ? $productAttribute['parent'] : sprintf("Parent %s", $singular_name);
 			$description = isset($productAttribute['description']) ? $productAttribute['description'] : sprintf("This is where you can create and manage %s.", $plural);
-			$object_types = ["product"];
+			$object_types = ["cmb_product"];
 
 			$public = isset($productAttribute['public']) ? $productAttribute['public'] : true;
 			$show_ui = isset($productAttribute['show_ui']) ? $productAttribute['show_ui'] : true;
@@ -262,15 +262,15 @@ class ComboStorePostTypes
 
 	public function post_type_product()
 	{
-		if (post_type_exists("product"))
+		if (post_type_exists("cmb_product"))
 			return;
 
-		$singular  = __('Product', 'combostore-server');
-		$plural    = __('Products', 'combostore-server');
+		$singular  = __('CB Product', 'combostore-server');
+		$plural    = __('CB Products', 'combostore-server');
 
 
 		register_post_type(
-			"product",
+			"cmb_product",
 			apply_filters("cstore_post_type_product", array(
 				'labels' => array(
 					'name' 					=> $plural,
@@ -334,7 +334,7 @@ class ComboStorePostTypes
 
 		register_taxonomy(
 			"product_cat",
-			apply_filters('cstore_product_cat_object_type', array('product')),
+			apply_filters('cstore_product_cat_object_type', array('cmb_product')),
 			apply_filters('cstore_product_cat_args', array(
 				'hierarchical' 			=> true,
 				'show_admin_column' 	=> true,
@@ -383,7 +383,7 @@ class ComboStorePostTypes
 
 		register_taxonomy(
 			"product_tag",
-			apply_filters('cstore_product_tag_object_type', array('product')),
+			apply_filters('cstore_product_tag_object_type', array('cmb_product')),
 			apply_filters('cstore_product_tag_args', array(
 				'hierarchical' 			=> false,
 				'show_admin_column' 	=> true,
@@ -428,7 +428,7 @@ class ComboStorePostTypes
 
 		register_taxonomy(
 			"product_badge",
-			apply_filters('cstore_product_badge_object_type', array('product')),
+			apply_filters('cstore_product_badge_object_type', array('cmb_product')),
 			apply_filters('cstore_product_badge_args', array(
 				'hierarchical' 			=> false,
 				'show_admin_column' 	=> true,
@@ -475,7 +475,7 @@ class ComboStorePostTypes
 
 		register_taxonomy(
 			"product_brand",
-			apply_filters('cstore_product_brand_object_type', array('product')),
+			apply_filters('cstore_product_brand_object_type', array('cmb_product')),
 			apply_filters('cstore_product_brand_args', array(
 				'hierarchical' 			=> false,
 				'show_admin_column' 	=> true,
@@ -529,7 +529,7 @@ class ComboStorePostTypes
 
 		register_taxonomy(
 			"product_visibility",
-			apply_filters('cstore_product_visibility_object_type', array('product')),
+			apply_filters('cstore_product_visibility_object_type', array('cmb_product')),
 			apply_filters('cstore_product_visibility_args', array(
 				'hierarchical' 			=> true,
 				'show_admin_column' 	=> true,

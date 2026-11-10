@@ -428,6 +428,12 @@ class ComboStoreStocks
             /*
          * Update product or variation stock.
          */
+            /*
+                The row that was found and locked above. $row_id is the post id
+                for a simple product (it is looked up by cstore_products.product_id),
+                so updating by it changed nothing - or another product whose row id
+                happened to equal this one's post id.
+            */
             $updated = $wpdb->update(
                 $table,
                 array(
@@ -435,7 +441,7 @@ class ComboStoreStocks
                     'stock_status' => $stock_status,
                 ),
                 array(
-                    'id' => $row_id,
+                    'id' => (int) $item['id'],
                 ),
                 array('%d', '%s'),
                 array('%d')
@@ -630,6 +636,12 @@ class ComboStoreStocks
 
         $page     = isset($prams['paged']) ? absint($prams['paged']) : 1;
         $per_page     = isset($prams['per_page']) ? absint($prams['per_page']) : 10;
+        /* 0 used to divide by zero below. */
+        $per_page     = max(1, min(200, $per_page));
+        /* Where the movement came from: order, purchase or manual. */
+        $reference_type = isset($prams['reference_type']) ? sanitize_key($prams['reference_type']) : '';
+        /* in = stock went up, out = stock went down. */
+        $direction = isset($prams['direction']) ? sanitize_key($prams['direction']) : '';
         $order     = isset($prams['order']) ? sanitize_text_field($prams['order']) : "DESC";
         $customer     = isset($prams['customer']) ? ($prams['customer']) : [];
 
@@ -659,13 +671,22 @@ class ComboStoreStocks
 
         //$entries = $wpdb->get_results("SELECT * FROM $table_expenses WHERE datetime BETWEEN '$first_date' AND '$last_day' ORDER BY id $order limit $offset, $per_page");
 
+        $entries = [];
+        $total = 0;
+
         if ($isAdmin) {
             $where   = [];
             $params  = [];
 
-            if (!empty($status)) {
-                $where[]  = "status = %s";
-                $params[] = $status;
+            if ($reference_type !== '') {
+                $where[]  = "reference_type = %s";
+                $params[] = $reference_type;
+            }
+
+            if ($direction === 'in') {
+                $where[] = "stock_after > stock_before";
+            } elseif ($direction === 'out') {
+                $where[] = "stock_after < stock_before";
             }
 
 
@@ -682,9 +703,13 @@ class ComboStoreStocks
                 $params[] = $warehouse_id;
             }
 
-            if ($from_date && $to_date) {
-                $where[]  = "created_at BETWEEN %s AND %s";
+            if ($from_date) {
+                $where[]  = "created_at >= %s";
                 $params[] = $from_date . " 00:00:00";
+            }
+
+            if ($to_date) {
+                $where[]  = "created_at <= %s";
                 $params[] = $to_date . " 23:59:59";
             }
 
@@ -709,16 +734,19 @@ class ComboStoreStocks
                     ORDER BY id $order
                     LIMIT %d, %d";
 
+            $count_sql = "SELECT COUNT(id) FROM $table_expenses $where_sql";
+            $total = (int) (!empty($params) ? $wpdb->get_var($wpdb->prepare($count_sql, $params)) : $wpdb->get_var($count_sql));
+
+            /* Units in and out across every matching row, not just this page. */
+            $sum_sql = "SELECT COALESCE(SUM(GREATEST(stock_after - stock_before, 0)), 0) AS units_in, COALESCE(SUM(GREATEST(stock_before - stock_after, 0)), 0) AS units_out FROM $table_expenses $where_sql";
+            $sums = !empty($params) ? $wpdb->get_row($wpdb->prepare($sum_sql, $params)) : $wpdb->get_row($sum_sql);
+            $responses['units_in']  = $sums ? (float) $sums->units_in : 0;
+            $responses['units_out'] = $sums ? (float) $sums->units_out : 0;
+
             $params[] = (int) $offset;
             $params[] = (int) $per_page;
-
             $query = $wpdb->prepare($sql, $params);
-
             $entries = $wpdb->get_results($query);
-
-
-
-            $total = count($entries);
         }
 
 
@@ -728,18 +756,19 @@ class ComboStoreStocks
 
 
 
+        $table_variations = $prefix . 'cstore_products_variations';
+
+        /* The screen shows names, and the table only stores ids. A deleted variation stays blank. */
         foreach ($entries as $key => $entry) {
-            $user = get_user_by('id', $entry->created_by);
+            $user = !empty($entry->created_by) ? get_user_by('id', $entry->created_by) : false;
 
-
-            // $entry->created_by = [
-            //     'name' => isset($user->display_name) ? $user->display_name : '',
-            //     'id' => isset($user->ID) ? $user->ID : '',
-            // ];
+            $entry->created_by_name = $user ? $user->display_name : '';
+            $entry->product_title = get_the_title($entry->product_id);
+            $entry->product_thumbnail = get_the_post_thumbnail_url($entry->product_id, 'thumbnail') ?: '';
+            $entry->variation_title = !empty($entry->variation_id)
+                ? (string) $wpdb->get_var($wpdb->prepare("SELECT title FROM $table_variations WHERE id = %d", $entry->variation_id))
+                : '';
         }
-
-
-
 
         // Fix the total count query by removing the per_page clause
 

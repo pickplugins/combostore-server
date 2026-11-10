@@ -33,6 +33,12 @@ class ComboStoreTemplateParts
         $thumbnail       = isset($params['thumbnail']) ? sanitize_text_field($params['thumbnail']) : '';
         $style = isset($params['style']) ? wp_kses_post($params['style']) : null;
         $meta = isset($params['meta']) ? stripslashes_deep($params['meta']) : null;
+        /* A template file sends meta (fonts, typography, colors) as an object; it was
+           written as-is into a %s column, so it never reached get_template_settings.
+           Stored as JSON, as update_template does. */
+        if (is_array($meta) || is_object($meta)) {
+            $meta = wp_json_encode($meta, JSON_UNESCAPED_UNICODE);
+        }
         $pages = isset($params['pages']) ? stripslashes_deep($params['pages']) : null;
 
 
@@ -164,7 +170,7 @@ class ComboStoreTemplateParts
         $response = [];
 
 
-
+        error_log(wp_json_encode($params, JSON_UNESCAPED_UNICODE));
 
 
 
@@ -254,8 +260,9 @@ class ComboStoreTemplateParts
 
 
 
-            $disableHeader     = isset($meta->disableHeader) ? ($meta->disableHeader) : false;
-            $disableFooter     = isset($meta->disableFooter) ? ($meta->disableFooter) : false;
+            /* $meta is an array (json_decode(..., true)); reading it as an object was always unset, so the toggles never applied here. */
+            $disableHeader     = is_array($meta) && !empty($meta['disableHeader']);
+            $disableFooter     = is_array($meta) && !empty($meta['disableFooter']);
 
             $rowData['content'] = $content;
             $rowData['meta'] = $meta;
@@ -514,10 +521,11 @@ class ComboStoreTemplateParts
 
         $responses = [];
         $type     = isset($prams->type) ? sanitize_text_field($prams->type) : null;
+        $slug     = isset($prams->slug) ? sanitize_text_field($prams->slug) : null;
         $id     = isset($prams->id) ? sanitize_text_field($prams->id) : null;
 
 
-
+        error_log(wp_json_encode($prams, JSON_UNESCAPED_UNICODE));
 
 
 
@@ -545,6 +553,52 @@ class ComboStoreTemplateParts
                     "SELECT * FROM $table WHERE template_id = %d AND type = %s",
                     $template_id,
                     $type
+                ),
+                ARRAY_A
+            );
+
+
+            $meta     = isset($rowData['meta']) ? json_decode($rowData['meta'], true) : [];
+            $disableHeader     = isset($meta['disableHeader']) ? ($meta['disableHeader']) : false;
+            $disableFooter     = isset($meta['disableFooter']) ? ($meta['disableFooter']) : false;
+
+
+
+
+            if (!$disableHeader) {
+                $rowHeader = $wpdb->get_row(
+                    $wpdb->prepare(
+                        "SELECT * FROM $table WHERE template_id = %d AND type = %s",
+                        $template_id,
+                        'header'
+                    ),
+                    ARRAY_A
+                );
+
+                $rowData['header'] = $rowHeader;
+            }
+
+            if (!$disableFooter) {
+
+                $rowFooter = $wpdb->get_row(
+                    $wpdb->prepare(
+                        "SELECT * FROM $table WHERE template_id = %d AND type = %s",
+                        $template_id,
+                        'footer'
+                    ),
+                    ARRAY_A
+                );
+
+                $rowData['footer'] = $rowFooter;
+            }
+        }
+        if ($slug) {
+
+            $rowData = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT * FROM $table WHERE template_id = %d AND slug = %s",
+                    $template_id,
+                    $slug
                 ),
                 ARRAY_A
             );
@@ -802,9 +856,12 @@ class ComboStoreTemplateParts
         $format_map = array(
             'name'         => '%s',
             'description'         => '%s',
-            'thumbnail'   => '%f',
-            'style' => '%f',
-            'meta' => '%f',
+            /* These were '%f', so the JSON meta (fonts, colors), the stylesheet and a
+               thumbnail URL were all written as a number - every template's meta in
+               the table was empty. */
+            'thumbnail'   => '%s',
+            'style' => '%s',
+            'meta' => '%s',
 
         );
 
@@ -854,7 +911,8 @@ class ComboStoreTemplateParts
         // $updated = $wpdb->update($table, $data, $where, $format, $where_format);
 
 
-        if ($updated) {
+        /* $wpdb->update returns 0 when the row already held these values; only false is an error. */
+        if ($updated !== false && !empty($filtered_data)) {
             $response['success'] = true;
         } else {
             $response['success'] = false;

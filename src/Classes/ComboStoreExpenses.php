@@ -252,7 +252,7 @@ class ComboStoreExpenses
             if (!empty($product_id)) {
                 $where[] = "EXISTS (
                     SELECT 1 FROM {$table_expenses_items} oi
-                    WHERE oi.order_id = {$table_expenses}.id
+                    WHERE oi.expense_id = {$table_expenses}.id
                     AND oi.product_id = %d
                 )";
 
@@ -284,12 +284,21 @@ class ComboStoreExpenses
 
             $entries = $wpdb->get_results($query);
 
+            /*
+                Every matching expense, not the rows on this page: count($entries)
+                made max_pages 1, so an admin could never get past page 1. Same
+                filters and values, without the LIMIT pair.
+            */
+            $count_params = array_slice($params, 0, -2);
+            $count_sql = "SELECT COUNT(*) FROM $table_expenses $where_sql";
 
-
-            $total = count($entries);
+            $total = (int) $wpdb->get_var(!empty($count_params) ? $wpdb->prepare($count_sql, $count_params) : $count_sql);
         } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_expenses WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_expenses WHERE userid='$user_id'");
+            /* The creator is created_by; "userid" does not exist, so non-admins (store
+               managers, and the dashboard widgets for them) got a SQL error and an empty list. */
+            $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+            $entries = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table_expenses WHERE created_by = %d ORDER BY id $order LIMIT %d, %d", $user_id, $offset, $per_page));
+            $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(id) FROM $table_expenses WHERE created_by = %d", $user_id));
         }
 
 
@@ -317,7 +326,7 @@ class ComboStoreExpenses
         // Fix the total count query by removing the per_page clause
 
         // Calculate max pages
-        $max_pages = ceil($total / $per_page);
+        $max_pages = $per_page > 0 ? ceil($total / $per_page) : 1;
 
         $responses['total'] = (int)$total;
 
@@ -462,7 +471,13 @@ class ComboStoreExpenses
 
 
         foreach ($lineItems as $cartItem) {
-            $product_id    = isset($cartItem['id']) ? intval($cartItem['id']) : 0;
+            /*
+                The product is product_id - what every caller sends. This read
+                $cartItem['id'], which for a line loaded from the database is the
+                item row's own id and for a new line is missing, so every save
+                linked the lines to the wrong product, or to none.
+            */
+            $product_id    = isset($cartItem['product_id']) ? intval($cartItem['product_id']) : 0;
             $product_name  = isset($cartItem['product_name']) ? sanitize_text_field($cartItem['product_name']) : '';
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
             $quantity      = isset($cartItem['quantity']) ? intval($cartItem['quantity']) : 1;

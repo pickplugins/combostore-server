@@ -264,6 +264,8 @@ class ComboStoreStats
 
         $start_date = $args['start_date'] ?? null;
         $end_date   = $args['end_date'] ?? null;
+        $keyword    = isset($args['keyword']) ? sanitize_text_field($args['keyword']) : '';
+        $order      = isset($args['order']) && strtoupper($args['order']) === 'ASC' ? 'ASC' : 'DESC';
 
         // Pagination
         $limit = max(1, min(100, absint($args['per_page'] ?? 20)));
@@ -281,13 +283,20 @@ class ComboStoreStats
         $params = ['completed', 'paid'];
 
         if (!empty($start_date)) {
-            $where .= " AND completed_at >= %s";
+            $where .= " AND COALESCE(completed_at, created_at) >= %s";
             $params[] = sanitize_text_field($start_date) . ' 00:00:00';
         }
 
         if (!empty($end_date)) {
-            $where .= " AND completed_at <= %s";
+            $where .= " AND COALESCE(completed_at, created_at) <= %s";
             $params[] = sanitize_text_field($end_date) . ' 23:59:59';
+        }
+
+        if ($keyword !== '') {
+            $like = '%' . $wpdb->esc_like($keyword) . '%';
+
+            $where .= " AND (billing_name LIKE %s OR billing_email LIKE %s OR billing_phone LIKE %s)";
+            array_push($params, $like, $like, $like);
         }
 
         // Count total customers matching the same filters
@@ -312,7 +321,7 @@ class ComboStoreStats
         FROM {$table}
         {$where}
         GROUP BY billing_email
-        ORDER BY total_spent DESC
+        ORDER BY total_spent {$order}
         LIMIT %d OFFSET %d
     ";
 
@@ -321,6 +330,8 @@ class ComboStoreStats
         $prepared = $wpdb->prepare($query, $query_params);
 
         $response['users'] = $wpdb->get_results($prepared);
+        $response['total'] = $total;
+        $response['max_pages'] = (int) ceil($total / $limit);
 
         // Pagination metadata
         // $response['pagination'] = [
@@ -662,8 +673,8 @@ class ComboStoreStats
         // -----------------------------
         $userid        = isset($args['customer_id']) ? intval($args['customer_id']) : 0;
         $product_id    = isset($args['product_id']) ? intval($args['product_id']) : 0;
-        $orderStatus   = isset($args['orderStatus']) ? sanitize_text_field($args['orderStatus']) : '';
-        $paymentStatus = isset($args['paymentStatus']) ? sanitize_text_field($args['paymentStatus']) : '';
+        $orderStatus   = isset($args['orderStatus']) ? sanitize_text_field($args['orderStatus']) : 'completed';
+        $paymentStatus = isset($args['paymentStatus']) ? sanitize_text_field($args['paymentStatus']) : 'paid';
         $paymentMethod = isset($args['paymentMethod']) ? sanitize_text_field($args['paymentMethod']) : '';
         $first_date     = isset($args['first_date']) ? sanitize_text_field($args['first_date']) : '';
         $last_date       = isset($args['last_date']) ? sanitize_text_field($args['last_date']) : '';
@@ -1674,6 +1685,8 @@ class ComboStoreStats
         $start_date = $args['start_date'] ?? null;
         $end_date = $args['end_date'] ?? null;
 
+        error_log("start_date: $start_date");
+        error_log("end_date: $end_date");
 
         global $wpdb;
 
@@ -1828,6 +1841,8 @@ class ComboStoreStats
 
         $start_date = $args['start_date'] ?? null;
         $end_date   = $args['end_date'] ?? null;
+        $keyword    = isset($args['keyword']) ? sanitize_text_field($args['keyword']) : '';
+        $order      = isset($args['order']) && strtoupper($args['order']) === 'ASC' ? 'ASC' : 'DESC';
 
         // Pagination
         $limit  = max(1, min(100, absint($args['per_page'] ?? $args['limit'] ?? 10)));
@@ -1847,15 +1862,29 @@ class ComboStoreStats
 
         // Start date filter
         if (!empty($start_date)) {
-            $where .= " AND o.completed_at >= %s";
+            $where .= " AND COALESCE(o.completed_at, o.created_at) >= %s";
             $params[] = sanitize_text_field($start_date) . ' 00:00:00';
         }
 
         // End date filter
         if (!empty($end_date)) {
-            $where .= " AND o.completed_at <= %s";
+            $where .= " AND COALESCE(o.completed_at, o.created_at) <= %s";
             $params[] = sanitize_text_field($end_date) . ' 23:59:59';
         }
+
+        if ($keyword !== '') {
+            $like = '%' . $wpdb->esc_like($keyword) . '%';
+
+            $where .= " AND (oi.product_name LIKE %s OR oi.sku LIKE %s)";
+            array_push($params, $like, $like);
+        }
+
+        /*
+            One row per product. Grouping by name and SKU as well split a product
+            into one row per spelling, which understated its rank. Items sold
+            without a product id have only their name to go on.
+        */
+        $group_by = "IF(oi.product_id > 0, CONCAT('id-', oi.product_id), oi.product_name)";
 
         // Count total distinct products matching the filters
         $count_query = "
@@ -1865,7 +1894,7 @@ class ComboStoreStats
             FROM {$items_table} oi
             INNER JOIN {$orders_table} o ON oi.order_id = o.id
             {$where}
-            GROUP BY oi.product_id, oi.product_name, oi.sku
+            GROUP BY {$group_by}
         ) AS product_groups
     ";
 
@@ -1876,17 +1905,17 @@ class ComboStoreStats
         // Fetch paginated top-selling products
         $query = "
         SELECT
-            oi.product_id,
-            oi.product_name,
-            oi.sku,
+            MAX(oi.product_id) AS product_id,
+            MAX(oi.product_name) AS product_name,
+            MAX(oi.sku) AS sku,
             SUM(oi.quantity) AS total_units_sold,
             COUNT(DISTINCT oi.order_id) AS total_orders,
-            SUM(oi.total) AS total_revenue
+            SUM(oi.quantity * oi.price) AS total_revenue
         FROM {$items_table} oi
         INNER JOIN {$orders_table} o ON oi.order_id = o.id
         {$where}
-        GROUP BY oi.product_id, oi.product_name, oi.sku
-        ORDER BY total_units_sold DESC, oi.product_id ASC
+        GROUP BY {$group_by}
+        ORDER BY total_units_sold {$order}, product_id ASC
         LIMIT %d OFFSET %d
     ";
 
@@ -1901,6 +1930,9 @@ class ComboStoreStats
 
             $product_name = get_the_title($id);
 
+            /* Deleted products keep the name from the order, and must not be linked to. */
+            $items[$key]->product_exists = $id > 0 && get_post_status($id) !== false;
+
             if ($product_name) {
                 $items[$key]->product_name = $product_name;
             }
@@ -1914,6 +1946,8 @@ class ComboStoreStats
         $total_pages = (int) ceil($total / $limit);
 
         $response['products'] = $items;
+        $response['total'] = $total;
+        $response['max_pages'] = $total_pages;
 
         // $response['pagination'] = [
         //     'total'         => $total,
@@ -2350,7 +2384,7 @@ class ComboStoreStats
 
         $count_posts = wp_count_posts('product');
 
-        $total = $count_posts->publish;
+        $total = isset($count_posts->publish) ? $count_posts->publish : 0;
 
 
         return $total ? $total : 0;

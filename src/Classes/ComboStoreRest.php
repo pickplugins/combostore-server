@@ -677,6 +677,16 @@ class ComboStoreRest
             )
         );
 
+        register_rest_route(
+            'combo-store/v2',
+            '/update_ticket',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_ticket'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
 
 
         register_rest_route(
@@ -690,6 +700,16 @@ class ComboStoreRest
         );
 
 
+
+        register_rest_route(
+            'combo-store/v2',
+            '/moderate_comments',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'moderate_comments'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
         register_rest_route(
             'combo-store/v2',
@@ -1080,15 +1100,6 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
-        register_rest_route(
-            'combo-store/v2',
-            '/add_stock_histoy',
-            array(
-                'methods'  => 'POST',
-                'callback' => array($this, 'add_stock_histoy'),
-                'permission_callback' => '__return_true',
-            )
-        );
 
 
 
@@ -1107,10 +1118,10 @@ class ComboStoreRest
 
         register_rest_route(
             'combo-store/v2',
-            '/get_product_table',
+            '/get_product_feed',
             array(
                 'methods'  => 'POST',
-                'callback' => array($this, 'get_product_table'),
+                'callback' => array($this, 'get_product_feed'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1261,6 +1272,15 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        register_rest_route(
+            'combo-store/v2',
+            '/update_post',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_post'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -1325,6 +1345,16 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_stocks_histories'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/adjust_stock',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'adjust_stock'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1423,6 +1453,16 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_active_template'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        /* The active site template's settings (fonts, colors) only - the storefront reads it on every page, so it must stay small. */
+        register_rest_route(
+            'combo-store/v2',
+            '/get_template_settings',
+            array(
+                'methods'  => array('GET', 'POST'),
+                'callback' => array($this, 'get_template_settings'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1776,6 +1816,16 @@ class ComboStoreRest
                 'permission_callback' => '__return_true',
             )
         );
+        /* The builder's Template Settings save here; the route was never registered, so those saves always failed. */
+        register_rest_route(
+            'combo-store/v2',
+            '/update_template',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_template'),
+                'permission_callback' => '__return_true',
+            )
+        );
 
 
 
@@ -1882,6 +1932,16 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'update_user_profile'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/update_user_password',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_user_password'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -2144,7 +2204,7 @@ class ComboStoreRest
                 $postData = [
                     "post_title" => $title,
                     "post_content" => '',
-                    'post_type'      => 'product',
+                    'post_type'      => 'cmb_product',
                     'post_status'      => 'draft',
                 ];
                 // wp_update_post($postData);
@@ -2189,7 +2249,7 @@ class ComboStoreRest
                 $postData = [
                     "post_title" => $line,
                     "post_content" => '',
-                    'post_type'      => 'product',
+                    'post_type'      => 'cmb_product',
                     'post_status'      => 'draft',
                     "post_excerpt" => "",
                 ];
@@ -2758,86 +2818,93 @@ class ComboStoreRest
      */
     public function get_subscriptions($request)
     {
-        // $token = $request->get_header('Authorization');
+        /*
+            Requires a signed-in user. Administrators and store managers see
+            every subscription; anyone else sees only their own. This used to
+            be open with `$isAdmin = true; $user_id = 1;` hard-coded, so any
+            visitor - and every customer's account page - received every
+            customer's subscriptions.
+        */
+        $token = $request->get_header('Authorization');
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+        $token = str_replace('Bearer ', '', $token);
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+        $user = $user_id ? get_user_by('id', $user_id) : null;
+        if (!$user) {
+            return new WP_Error('invalid_token', 'User not found', array('status' => 401));
+        }
+        $userRoles = isset($user->roles) ? (array) $user->roles : [];
+        $isAdmin = in_array('administrator', $userRoles, true) || in_array('store_manager', $userRoles, true);
 
+        $page = isset($request['paged']) ? max(1, absint($request['paged'])) : (isset($request['page']) ? max(1, absint($request['page'])) : 1);
+        $per_page = isset($request['per_page']) ? min(max(absint($request['per_page']), 1), 100) : 10;
+        /* Whitelisted: this value is written straight into ORDER BY. */
+        $order = isset($request['order']) && strtoupper($request['order']) === 'ASC' ? 'ASC' : 'DESC';
+        $status = isset($request['status']) ? sanitize_key($request['status']) : '';
+        $status = in_array($status, ['active', 'paused', 'canceled', 'expired'], true) ? $status : '';
+        $keyword = isset($request['keyword']) ? trim(sanitize_text_field($request['keyword'])) : '';
 
-        // if (!$token) {
-        //     return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-        // }
-
-        // // Remove "Bearer " prefix if present
-        // $token = str_replace('Bearer ', '', $token);
-
-        // // Decode the token
-        // try {
-        //     $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        // } catch (Exception $e) {
-        //     return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        // }
-
-
-        // // Get user by ID
-        // // $user = get_user_by('id', $decoded_token->sub);
-
-
-
-        // $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-        // if (!$user_id) {
-        //     return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        // }
-
-
-
-        // $user = get_user_by('id', $user_id);
-
-        // if (!$user) {
-        //     return new WP_Error('user_not_found', 'User not found', array('status' => 404));
-        // }
-
-        // $userRoles = isset($user->roles) ? $user->roles : [];
-        // $isAdmin = in_array('administrator', $userRoles) ? true : false;
-
-
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : 'DESC';
-
-        $isAdmin = true;
-        $user_id = 1;
         global $wpdb;
+        $table_subscriptions = $wpdb->prefix . 'cstore_subscriptions';
+        $table_orders = $wpdb->prefix . 'cstore_orders';
 
-        $prefix = $wpdb->prefix;
+        $where = ['1=1'];
+        $values = [];
 
-        $table_subscriptions = $prefix . 'cstore_subscriptions';
-
-        $response = [];
-        $offset = ($page - 1) * $per_page;
-
-        $last_day = gmdate("Y-m-d");
-        $first_date = gmdate("Y-m-d", strtotime("7 days ago"));
-
-        //$entries = $wpdb->get_results("SELECT * FROM $table_subscriptions WHERE datetime BETWEEN '$first_date' AND '$last_day' ORDER BY id $order limit $offset, $per_page");
-
-        if ($isAdmin) {
-
-            $entries = $wpdb->get_results("SELECT * FROM $table_subscriptions ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_subscriptions");
-        } else {
-
-            $entries = $wpdb->get_results("SELECT * FROM $table_subscriptions WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_subscriptions WHERE userid='$user_id'");
+        if (!$isAdmin) {
+            $where[] = 's.userid = %d';
+            $values[] = absint($user_id);
+        }
+        if ($keyword !== '' && $keyword[0] === '#') {
+            /* "#12" means an ID: subscription #12 or order #12, nothing fuzzy. */
+            $number = absint(substr($keyword, 1));
+            $where[] = '(s.id = %d OR s.order_id = %d)';
+            array_push($values, $number, $number);
+        } elseif ($keyword !== '') {
+            $like = '%' . $wpdb->esc_like($keyword) . '%';
+            $number = ctype_digit($keyword) ? absint($keyword) : 0;
+            $where[] = '(s.id = %d OR s.order_id = %d OR o.billing_name LIKE %s OR o.billing_phone LIKE %s OR o.billing_email LIKE %s OR u.display_name LIKE %s OR u.user_email LIKE %s)';
+            array_push($values, $number, $number, $like, $like, $like, $like, $like);
         }
 
+        $from = "FROM $table_subscriptions s
+                 LEFT JOIN $table_orders o ON o.id = s.order_id
+                 LEFT JOIN {$wpdb->users} u ON u.ID = s.userid";
+        $base_where = implode(' AND ', $where);
 
+        /* Counts per status for the filter, before the status filter itself. */
+        $count_sql = "SELECT s.status, COUNT(s.id) $from WHERE $base_where GROUP BY s.status";
+        $status_counts = ['active' => 0, 'paused' => 0, 'canceled' => 0, 'expired' => 0];
+        foreach ($wpdb->get_results($values ? $wpdb->prepare($count_sql, $values) : $count_sql, ARRAY_N) as $row) {
+            $status_counts[$row[0]] = (int) $row[1];
+        }
 
+        if ($status) {
+            $where[] = 's.status = %s';
+            $values[] = $status;
+        }
+        $full_where = implode(' AND ', $where);
 
-        $max_pages = ceil($total / $per_page);
+        $total_sql = "SELECT COUNT(s.id) $from WHERE $full_where";
+        $total = (int) $wpdb->get_var($values ? $wpdb->prepare($total_sql, $values) : $total_sql);
+
+        $list_sql = "SELECT s.*, o.billing_name, o.billing_email, o.billing_phone,
+                            u.display_name AS customer_name, u.user_email AS customer_email
+                     $from WHERE $full_where ORDER BY s.id $order LIMIT %d, %d";
+        $entries = $wpdb->get_results($wpdb->prepare($list_sql, array_merge($values, [($page - 1) * $per_page, $per_page])));
+
+        $response = [];
         $response['total'] = $total;
-        $response['max_pages'] = $max_pages;
+        $response['max_pages'] = (int) ceil($total / $per_page);
+        $response['status_counts'] = $status_counts;
         $response['posts'] = $entries;
-
 
         die(wp_json_encode($response));
     }
@@ -3468,6 +3535,90 @@ class ComboStoreRest
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
+    /**
+     * Change a product's (or variation's) stock by hand, from the Stocks screen.
+     *
+     * Goes through ComboStoreStocks::update_stock, so the change is in stock
+     * history with who made it and why. There was no route for this: the only
+     * way to change a count was the product editor, which wrote the number
+     * directly and left no history.
+     *
+     * Body: product_id (the product's post id), variation_id (optional),
+     * action (increase | decrease | set), quantity (whole number), note.
+     *
+     * @param WP_REST_Request $request
+     */
+    public function adjust_stock($request)
+    {
+        $user = $this->get_ticket_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        if (!array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to change stock', array('status' => 403));
+        }
+
+        $product_id   = isset($request['product_id']) ? absint($request['product_id']) : 0;
+        $variation_id = isset($request['variation_id']) ? absint($request['variation_id']) : 0;
+        $action       = isset($request['action']) ? sanitize_key($request['action']) : '';
+        $quantity     = isset($request['quantity']) ? $request['quantity'] : null;
+        $note         = isset($request['note']) ? sanitize_textarea_field($request['note']) : '';
+
+        $answer = function ($status, $message, $extra = array()) {
+            die(wp_json_encode(array_merge(array('status' => $status, 'message' => $message), $extra)));
+        };
+
+        if (!$product_id || get_post_type($product_id) !== 'cmb_product') {
+            $answer('failed', 'Product not found.');
+        }
+
+        if (!in_array($action, array('increase', 'decrease', 'set'), true)) {
+            $answer('failed', 'Choose add, remove or set.');
+        }
+
+        if (!is_numeric($quantity) || (float) $quantity < 0 || floor((float) $quantity) != (float) $quantity) {
+            $answer('failed', 'The quantity must be a whole number, 0 or more.');
+        }
+
+        if ($action !== 'set' && (int) $quantity === 0) {
+            $answer('failed', 'Enter how many to add or remove.');
+        }
+
+        $ComboStoreStocks = new ComboStoreStocks();
+
+        $result = $ComboStoreStocks->update_stock(array(
+            'product_id'     => $product_id,
+            'variation_id'   => $variation_id,
+            'action'         => $action,
+            'quantity'       => (int) $quantity,
+            'reference_type' => 'manual',
+            'note'           => $note !== '' ? $note : 'Adjusted on the Stocks screen',
+            'created_by'     => (int) $user->ID,
+        ));
+
+        if (!isset($result['status']) || $result['status'] !== 'success') {
+            $message = isset($result['message']) ? $result['message'] : 'Stock not changed.';
+
+            if ($message === 'Insufficient stock.') {
+                $message = 'There is not that much in stock to remove.';
+            }
+
+            $answer('failed', $message);
+        }
+
+        if (isset($result['stock_after']) && (int) $result['stock_after'] < 5) {
+            do_action('combo_store_low_stock', $product_id);
+        }
+
+        $answer('success', 'Stock updated.', array(
+            'stock_before' => (int) $result['stock_before'],
+            'stock_after'  => (int) $result['stock_after'],
+            'stock_status' => $result['stock_status'],
+        ));
+    }
+
     public function get_stocks_histories($request)
     {
         $token = $request->get_header('Authorization');
@@ -3510,7 +3661,8 @@ class ComboStoreRest
         // $user_id = 1;
         // $isAdmin = true;
         $userRoles = isset($user->roles) ? $user->roles : [];
-        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        /* The same roles the sidebar shows this screen to. */
+        $isAdmin = (bool) array_intersect(['administrator', 'store_manager'], (array) $userRoles);
 
 
 
@@ -4264,23 +4416,14 @@ class ComboStoreRest
             "featured" => $featured,
             "author" => $author,
 
-            "categories" => $categoriesData,
-            // "tags" => $tagsData,
+            "categories" => $categoriesData ?? [],
+            "tags" => $tagsData ?? [],
 
             "gallery" => $gallery,
-            "addons" => $addons,
-            "downloads" => $downloads,
-            "downloadCount" => !empty($downloadCount) ? $downloadCount : 0,
-            "voteCount" => !empty($voteCount) ? (int)$voteCount : 0,
-            "loveCount" => !empty($loveCount) ? (int)$loveCount : 0,
-            "viewCount" => !empty($viewCount) ? (int)$viewCount : 0,
-            // "loved" => $loved,
-            "faq" => $faq,
-            "relatedPrompts" => $relatedPrompts,
-            "variations" => $variations,
+            "related_posts" => $relatedPrompts,
         ];
 
-
+        error_log(wp_json_encode($promptData));
 
         $response['post'] = $promptData;
 
@@ -4375,6 +4518,8 @@ class ComboStoreRest
 
         // $postData = isset($postsData[0]) ? $postsData[0] : null;
         $css = get_post_meta($postData->ID, 'css');
+        /* The builder's page settings (see update_page); an object even when empty, so the client can spread it. */
+        $page_meta = isset($postData->ID) ? get_post_meta($postData->ID, 'page_meta', true) : [];
 
 
         $promptData = [
@@ -4385,6 +4530,7 @@ class ComboStoreRest
             "post_type" => isset($postData->post_type) ? $postData->post_type : null,
             "excerpt" => isset($postData->post_excerpt) ? $postData->post_excerpt : null,
             "css" => $css,
+            "meta" => (object) (is_array($page_meta) ? $page_meta : []),
         ];
 
 
@@ -4404,6 +4550,36 @@ class ComboStoreRest
 
 
 
+
+    /**
+     * The roles of the user whose token came with the request.
+     *
+     * For public endpoints that only show more to some users: a missing,
+     * invalid or expired token is an anonymous visitor, never an error, so a
+     * stale token left in the storefront cannot break a public page.
+     *
+     * @param WP_REST_Request $request
+     * @return string[]
+     */
+    private function request_user_roles($request)
+    {
+        $token = $request->get_header('Authorization');
+
+        if (!$token) {
+            return [];
+        }
+
+        try {
+            $decoded_token = JWT::decode(str_replace('Bearer ', '', $token), new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return [];
+        }
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+        $user = $user_id ? get_user_by('id', $user_id) : false;
+
+        return ($user && isset($user->roles)) ? (array) $user->roles : [];
+    }
 
     /**
      * Return Posts
@@ -4509,7 +4685,7 @@ class ComboStoreRest
                 );
             }
         }
-        if (in_array('product', $post_type)) {
+        if (in_array('cmb_product', $post_type)) {
 
             if ($stock_status) {
 
@@ -4604,6 +4780,21 @@ class ComboStoreRest
 
         $query_args['post_status'] = 'publish';
 
+        /*
+            This endpoint is public and the storefront uses it, so unpublished
+            posts are only listed when an administrator asks for them by name
+            (the dashboard's Posts screen sends post_status "any"). An admin
+            browsing the shop, who sends no post_status, still sees only
+            published posts.
+        */
+        $requested_status = isset($request['post_status']) ? sanitize_key($request['post_status']) : '';
+
+        if ($requested_status && in_array($requested_status, ['any', 'publish', 'draft', 'pending', 'private', 'future'], true)) {
+            if (in_array('administrator', $this->request_user_roles($request), true)) {
+                $query_args['post_status'] = $requested_status;
+            }
+        }
+
         if (!empty($post_type)) {
             $query_args['post_type'] = $post_type;
         }
@@ -4631,7 +4822,16 @@ class ComboStoreRest
         if (!empty($tax_query)) {
             $query_args['tax_query'] = $tax_query;
         }
+        /* post__in / post__not_in were read above but never applied, so a
+           query for given posts (e.g. a product's upsells) returned every post. */
+        if (!empty($post__in)) {
+            $query_args['post__in'] = array_map('absint', (array) $post__in);
+        }
+        if (!empty($post__not_in)) {
+            $query_args['post__not_in'] = array_map('absint', (array) $post__not_in);
+        }
 
+        error_log(wp_json_encode($query_args));
 
 
         $wp_query = new WP_Query($query_args);
@@ -4757,7 +4957,7 @@ class ComboStoreRest
 
 
 
-                if ($postData->post_type == 'product') {
+                if ($postData->post_type == 'cmb_product') {
 
                     $post_id = get_the_ID();
                     $postData = get_post($post_id);
@@ -4773,9 +4973,6 @@ class ComboStoreRest
 
                     $sale_price = get_post_meta($post_id, 'sale_price', true);
                     $regular_price = get_post_meta($post_id, 'regular_price', true);
-                    $trade_price = get_post_meta($post_id, 'trade_price', true);
-
-
 
 
                     $stock_status = get_post_meta($post_id, 'stock_status', true);
@@ -4783,14 +4980,8 @@ class ComboStoreRest
                     $gallery = get_post_meta($post_id, 'gallery', true);
                     $addons = get_post_meta($post_id, 'addons', true);
                     $downloads = get_post_meta($post_id, 'downloads', true);
-                    $weight = get_post_meta($post_id, 'weight', true);
-                    $length = get_post_meta($post_id, 'length', true);
-                    $width = get_post_meta($post_id, 'width', true);
-                    $height = get_post_meta($post_id, 'height', true);
-                    $upsells = get_post_meta($post_id, 'upsells', true);
-                    $crosssells = get_post_meta($post_id, 'crosssells', true);
+
                     $faq = get_post_meta($post_id, 'faq', true);
-                    $related_products = get_post_meta($post_id, 'related_products', true);
                     $variations = get_post_meta($post_id, 'variations', true);
                     $attributes = get_post_meta($post_id, 'attributes', true);
 
@@ -4929,7 +5120,43 @@ class ComboStoreRest
                     unset($product_data['id']);
 
 
+                    /*
+                        Archive cards render ProductPriceView too, which builds the
+                        "min - max" range from `variations` when addons has
+                        'variations'. Without them the card printed 0 - 0.
+                    */
+                    $variations = [];
+                    if (is_array($product_data['addons'] ?? null) && in_array('variations', $product_data['addons'], true)) {
+                        $variations = $ComboStoreProduct->get_variations(['product_id' => $postData->ID]);
+                        $variations = is_array($variations) ? $variations : [];
+
+                        foreach ($variations as &$variation) {
+                            if (!empty($variation->thumbnail)) {
+                                $thumbnail = json_decode($variation->thumbnail, true);
+                                if (json_last_error() === JSON_ERROR_NONE) {
+                                    $variation->thumbnail = $thumbnail;
+                                }
+                            } else {
+                                $variation->thumbnail = [];
+                            }
+
+                            if (!empty($variation->attributes) && is_string($variation->attributes)) {
+                                $attributes = json_decode($variation->attributes, true);
+                                if (json_last_error() === JSON_ERROR_NONE) {
+                                    $variation->attributes = $attributes;
+                                }
+                            } else {
+                                $variation->attributes = $variation->attributes ?? [];
+                            }
+
+                            $variation->variation_id = $variation->id;
+                        }
+                        unset($variation);
+                    }
+
+
                     $entry['price'] = $price;
+                    $entry['variations'] = $variations;
 
 
                     $entries[] = array_merge($entry, $product_data);
@@ -5006,11 +5233,26 @@ class ComboStoreRest
 
 
         $taxonomy     = isset($request['taxonomy']) ? sanitize_text_field($request['taxonomy']) : null;
-        $number     = isset($request['number']) ? sanitize_text_field($request['number']) : 999;
-        $page     = isset($request['paged']) ? sanitize_text_field($request['paged']) : 1;
+        $hierarchical     = isset($request['hierarchical']) ? (bool) $request['hierarchical'] : false;
+        $page     = isset($request['paged']) ? max(1, absint($request['paged'])) : 1;
+
+        /*
+            Page size. `number` still wins when sent. `per_page` is honoured only
+            together with `paged` - the dashboard list screens send both - and
+            never for a hierarchical request, whose tree has to be built from
+            every term. Pickers and menus send a small `per_page` without
+            `paged` yet expect every term back (the default of 999), which is
+            how this endpoint has always answered them.
+        */
+        if (isset($request['number'])) {
+            $number = absint($request['number']);
+        } elseif (isset($request['per_page'], $request['paged']) && !$hierarchical) {
+            $number = min(max(absint($request['per_page']), 1), 999);
+        } else {
+            $number = 999;
+        }
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : 'DESC';
         $parent     = isset($request['parent']) ?  (int) $request['parent'] : 0;
-        $hierarchical     = isset($request['hierarchical']) ? (bool) $request['hierarchical'] : false;
         $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : null;
         $hide_empty     = isset($request['hide_empty']) ? sanitize_text_field($request['hide_empty']) : false;
         $slug     = isset($request['slug']) ? stripslashes_deep($request['slug']) : [];
@@ -5067,20 +5309,43 @@ class ComboStoreRest
 
         $terms = get_terms($termsQuery);
 
+        /* Same filters without the page window, for the table's pager. */
+        $countQuery = $termsQuery;
+        unset($countQuery['number'], $countQuery['offset']);
+        $total = wp_count_terms($countQuery);
+        $total = is_wp_error($total) ? 0 : (int) $total;
+        $response['total'] = $total;
+        $response['max_pages'] = $number ? (int) ceil($total / $number) : 1;
+
 
 
 
         if (!is_wp_error($terms)) {
             foreach ($terms as &$term) {
-                $thumbnail_id = get_term_meta($term->term_id, 'thumbnail', true);
+                $thumbnail = get_term_meta($term->term_id, 'thumbnail', true);
 
-                // Add the thumbnail ID
-                $term->thumbnail = $thumbnail_id;
+                $term->thumbnail = $thumbnail;
 
-                // Optional: Get the image URL
-                $term->thumbnail_url = $thumbnail_id
-                    ? wp_get_attachment_url($thumbnail_id)
-                    : '';
+                /*
+                    The editors save the image as {id, title, src}. Passing that
+                    array to wp_get_attachment_url() returned false for every
+                    term, so the URL is taken from `src`, falling back to the
+                    attachment when only an id is present (and to a bare ID or
+                    URL, should older data hold one).
+                */
+                $thumbnail_url = '';
+                if (is_array($thumbnail)) {
+                    if (!empty($thumbnail['src'])) {
+                        $thumbnail_url = $thumbnail['src'];
+                    } elseif (!empty($thumbnail['id'])) {
+                        $thumbnail_url = wp_get_attachment_url(absint($thumbnail['id'])) ?: '';
+                    }
+                } elseif (is_numeric($thumbnail) && $thumbnail > 0) {
+                    $thumbnail_url = wp_get_attachment_url(absint($thumbnail)) ?: '';
+                } elseif (is_string($thumbnail) && filter_var($thumbnail, FILTER_VALIDATE_URL)) {
+                    $thumbnail_url = $thumbnail;
+                }
+                $term->thumbnail_url = $thumbnail_url;
 
                 // Optional: Get a specific image size
                 // $term->thumbnail_url = $thumbnail_id
@@ -5349,7 +5614,7 @@ class ComboStoreRest
             'taxonomy' => 'product_brand',
             'hide_empty' => true,
             'object_ids' => get_posts([
-                'post_type'   => 'product',
+                'post_type'   => 'cmb_product',
                 'numberposts' => -1,
                 'fields'      => 'ids',
                 'tax_query'   => [
@@ -5520,6 +5785,20 @@ class ComboStoreRest
             'description' => $description
         );
 
+        /*
+            Parent, for hierarchical taxonomies only (categories) - brands, tags
+            and badges send `parent: 0` from their editors and must not be
+            touched. A term cannot be its own parent; deeper loops (parent set to
+            one of its own children) are broken up by WordPress's
+            wp_check_term_hierarchy_for_loops filter.
+        */
+        if (isset($request['parent']) && $taxonomy && is_taxonomy_hierarchical($taxonomy)) {
+            $parent = absint($request['parent']);
+            if ($parent !== absint($term_id)) {
+                $args['parent'] = $parent;
+            }
+        }
+
         $result = wp_update_term($term_id, $taxonomy, $args);
 
 
@@ -5667,7 +5946,9 @@ class ComboStoreRest
             }
 
             $userRoles = isset($user->roles) ? $user->roles : [];
-            $isAdmin = in_array('administrator', $userRoles) ? true : false;
+            /* The roles the Products menu is open to. Store managers used to see
+               published products only - never a draft or pending one. */
+            $isAdmin = (bool) array_intersect(['administrator', 'store_manager'], (array) $userRoles);
         }
 
 
@@ -5700,11 +5981,18 @@ class ComboStoreRest
         $meta_query = [];
         $tax_query = [];
 
-        $query_args['post_type'] = 'product';
+        $query_args['post_type'] = 'cmb_product';
         $query_args['post_status'] = 'publish';
 
         if ($isAdmin) {
             $query_args['post_status'] = 'any';
+
+            /* The Products screen's Status filter. It was sent but never read. */
+            $wanted_status = isset($request['status']) ? sanitize_key($request['status']) : '';
+
+            if (in_array($wanted_status, array('publish', 'draft', 'pending', 'private', 'future'), true)) {
+                $query_args['post_status'] = $wanted_status;
+            }
         }
 
 
@@ -5793,13 +6081,26 @@ class ComboStoreRest
             );
         }
 
+        /*
+           Stock lives in cstore_products. This filtered on a stock_status post
+           meta that only one product has, so "In stock" found 1 product of 35.
+        */
         if ($stock_status) {
+            global $wpdb;
 
-            $meta_query[] = array(
-                'key' => 'stock_status',
-                'value'    => $stock_status,
-                'operator'    => '=',
-            );
+            $wanted_stock = array_values(array_intersect(array_map('sanitize_key', (array) $stock_status), array('instock', 'outofstock')));
+
+            if (!empty($wanted_stock)) {
+                $placeholders = implode(',', array_fill(0, count($wanted_stock), '%s'));
+                $stock_ids = array_map('intval', $wpdb->get_col($wpdb->prepare("SELECT product_id FROM {$wpdb->prefix}cstore_products WHERE stock_status IN ($placeholders)", $wanted_stock)));
+
+                if (!empty($query_args['post__in'])) {
+                    $stock_ids = array_values(array_intersect($stock_ids, array_map('intval', (array) $query_args['post__in'])));
+                }
+
+                /* No match must mean no products, not every product. */
+                $query_args['post__in'] = !empty($stock_ids) ? $stock_ids : array(0);
+            }
         }
 
 
@@ -6077,6 +6378,8 @@ class ComboStoreRest
      */
     public function query_products_stocks($request)
     {
+        global $wpdb;
+
         $token = $request->get_header('Authorization');
 
         $isAdmin = false;
@@ -6143,7 +6446,7 @@ class ComboStoreRest
         $meta_query = [];
         $tax_query = [];
 
-        $query_args['post_type'] = 'product';
+        $query_args['post_type'] = 'cmb_product';
         $query_args['post_status'] = 'publish';
 
         if ($isAdmin) {
@@ -6236,14 +6539,6 @@ class ComboStoreRest
             );
         }
 
-        if ($stock_status) {
-
-            $meta_query[] = array(
-                'key' => 'stock_status',
-                'value'    => $stock_status,
-                'operator'    => '=',
-            );
-        }
 
 
 
@@ -6264,6 +6559,33 @@ class ComboStoreRest
         if (!empty($order)) {
             $query_args['order'] = $order;
         }
+        /*
+            Stock lives in the products table, not post meta, so these two filters
+            become a list of ids. A number only looks at products that track stock:
+            most have a blank status and a count of 0, which is not "low".
+        */
+        $stock_conditions = [];
+
+        if ($stock_status && is_string($stock_status)) {
+            $stock_conditions[] = $wpdb->prepare('stock_status = %s', $stock_status);
+        }
+
+        if (isset($request['min_stock']) && is_numeric($request['min_stock'])) {
+            $stock_conditions[] = "stock_status <> ''";
+            $stock_conditions[] = $wpdb->prepare('stock_count <= %d', (int) $request['min_stock']);
+        }
+
+        if (!empty($stock_conditions)) {
+            $stock_ids = $wpdb->get_col("SELECT product_id FROM {$wpdb->prefix}cstore_products WHERE " . implode(' AND ', $stock_conditions));
+
+            if (!empty($post__in)) {
+                $stock_ids = array_intersect($stock_ids, (array) $post__in);
+            }
+
+            /* An empty post__in means "no limit", so nothing matching needs an id that cannot exist. */
+            $query_args['post__in'] = !empty($stock_ids) ? $stock_ids : [0];
+        }
+
         if (!empty($meta_query)) {
             $query_args['meta_query'] = $meta_query;
         }
@@ -6509,77 +6831,10 @@ class ComboStoreRest
 
         die(wp_json_encode($response));
     }
-    /**
-     * Return Posts
-     *
-     * @since 1.0.0
-     * @param WP_REST_Request $request Post data.
-     */
-    public function add_stock_histoy($request)
-    {
-        $token = $request->get_header('Authorization');
-
-        $isAdmin = false;
-
-        if ($token) {
-            //return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-
-            // Remove "Bearer " prefix if present
-            $token = str_replace('Bearer ', '', $token);
-
-            // Decode the token
-            try {
-                $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-            } catch (Exception $e) {
-                return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-            }
-
-
-            $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-            if (!$user_id) {
-                return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-            }
-
-
-
-            $user = get_user_by('id', $user_id);
-
-            if (!$user) {
-                return new WP_Error('user_not_found', 'User not found', array('status' => 404));
-            }
-
-            $userRoles = isset($user->roles) ? $user->roles : [];
-            $isAdmin = in_array('administrator', $userRoles) ? true : false;
-        }
-
-
-        $body = $request->get_body();
-
-        $body_arr = json_decode($body, true);
-
-        $response = [];
-
-        $ComboStoreStocks = new ComboStoreStocks();
-
-        $stockPrams = [
-            'product_id'    => 10018,
-            'variation_id'    => 352,
-            'action'        => 'decrease',
-            'quantity'      => 2,
-            'unit_cost'     => 45,
-            'event_type'    => 'purchase',
-            'reference_type' => 'purchase',
-            'reference_id'  => 10018_353,
-            'event_id'      => 'purchase_503_product_10018_353',
-            'note'          => 'Order 2 units.',
-        ];
-
-        $stockResponse = $ComboStoreStocks->update_stock($stockPrams);
-
-
-        die(wp_json_encode($stockResponse));
-    }
+    /*
+        add_stock_histoy() was removed: a public test endpoint that ignored the
+        request and always took 2 units from product 10018 / variation 352.
+    */
 
 
 
@@ -6658,7 +6913,7 @@ class ComboStoreRest
         $meta_query = [];
         $tax_query = [];
 
-        $query_args['post_type'] = 'product';
+        $query_args['post_type'] = 'cmb_product';
         $query_args['post_status'] = 'publish';
 
         if ($isAdmin) {
@@ -6982,7 +7237,7 @@ class ComboStoreRest
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
-    public function get_product_table($request)
+    public function get_product_feed($request)
     {
         // $token = $request->get_header('Authorization');
 
@@ -7022,31 +7277,94 @@ class ComboStoreRest
         $body = $request->get_body();
 
 
-        $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
+
+        /*
+            Feed filters. `category`, `brand` and `tag` take one slug or a
+            comma-separated list ("baby,toys"); `include`/`exclude` take post
+            IDs the same way. Price and stock live in the cstore_products table,
+            not post meta, so they are resolved to a post__in list below.
+        */
+        $slug_list = function ($value) {
+            if (is_array($value)) $value = implode(',', $value);
+            return array_values(array_filter(array_map('sanitize_title', explode(',', (string) $value))));
+        };
+        $id_list = function ($value) {
+            if (is_array($value)) $value = implode(',', $value);
+            return array_values(array_filter(array_map('absint', explode(',', (string) $value))));
+        };
+
+        $paged     = isset($request['paged']) ? max(1, absint($request['paged'])) : 1;
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 100;
+        $per_page     = $per_page > 0 ? min($per_page, 1000) : 100;
+
+        // error_log($per_page);
+
+
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
-        $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
+        $orderby     = in_array($orderby, ['date', 'modified', 'title', 'menu_order', 'rand', 'ID'], true) ? $orderby : "";
+        $order     = isset($request['order']) && strtoupper($request['order']) === 'ASC' ? 'ASC' : 'DESC';
         $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
-        $category     = isset($request['category']) ? sanitize_text_field($request['category']) : "";
-        $categories     = isset($request['categories']) ? ($request['categories']) : "";
-        $brand     = isset($request['brand']) ? sanitize_text_field($request['brand']) : "";
-        $tag     = isset($request['tag']) ? sanitize_text_field($request['tag']) : "";
-        $post__in     = isset($request['post__in']) ? ($request['post__in']) : [];
-        $post__not_in     = isset($request['post__not_in']) ? ($request['post__not_in']) : [];
+        $categories     = array_merge(
+            $slug_list($request['category'] ?? ''),
+            $slug_list($request['categories'] ?? '')
+        );
+        $brands_in     = $slug_list($request['brand'] ?? '');
+        $tags_in     = $slug_list($request['tag'] ?? '');
+        $post__in     = array_merge($id_list($request['post__in'] ?? ''), $id_list($request['include'] ?? ''));
+        $post__not_in     = array_merge($id_list($request['post__not_in'] ?? ''), $id_list($request['exclude'] ?? ''));
+        $stock_status     = isset($request['stock_status']) ? sanitize_key($request['stock_status']) : "";
+        $stock_status     = in_array($stock_status, ['instock', 'outofstock'], true) ? $stock_status : "";
+        $min_price     = isset($request['min_price']) && $request['min_price'] !== '' ? floatval($request['min_price']) : null;
+        $max_price     = isset($request['max_price']) && $request['max_price'] !== '' ? floatval($request['max_price']) : null;
+        $on_sale     = !empty($request['on_sale']);
+        /* Full descriptions push a 1000-product feed past Next.js's 2 MB fetch
+           cache and toward Vercel's 4.5 MB response limit; ads need far less. */
+        $description_length     = isset($request['description_length']) ? absint($request['description_length']) : 1000;
+        $description_length     = min(max($description_length, 50), 5000);
 
 
         $query_args = [];
         $meta_query = [];
         $tax_query = [];
 
-        $query_args['post_type'] = 'product';
+        $query_args['post_type'] = 'cmb_product';
         $query_args['post_status'] = 'publish';
 
 
+        /* Effective price = sale price when set, else regular price - the same
+           rule the entries below use for `price`. */
+        if ($stock_status || $min_price !== null || $max_price !== null || $on_sale) {
+            global $wpdb;
+            $products_table = $wpdb->prefix . 'cstore_products';
+            $effective = "(CASE WHEN sale_price > 0 THEN sale_price ELSE regular_price END)";
+            $where = ['1=1'];
+            $values = [];
 
-        if (!empty($paged)) {
-            $query_args['paged'] = $paged;
+            if ($stock_status) {
+                $where[] = 'stock_status = %s';
+                $values[] = $stock_status;
+            }
+            if ($min_price !== null) {
+                $where[] = "$effective >= %f";
+                $values[] = $min_price;
+            }
+            if ($max_price !== null) {
+                $where[] = "$effective <= %f";
+                $values[] = $max_price;
+            }
+            if ($on_sale) {
+                $where[] = 'sale_price > 0 AND sale_price < regular_price';
+            }
+
+            $sql = "SELECT product_id FROM $products_table WHERE " . implode(' AND ', $where);
+            $matched = array_map('absint', $wpdb->get_col($values ? $wpdb->prepare($sql, $values) : $sql));
+
+            $post__in = $post__in ? array_values(array_intersect($post__in, $matched)) : $matched;
+            /* No match must mean no products, not "no restriction". */
+            if (empty($post__in)) $post__in = [0];
         }
+
+
         if (!empty($keyword)) {
             $query_args['s'] = $keyword;
         }
@@ -7054,33 +7372,22 @@ class ComboStoreRest
             $query_args['post__in'] = $post__in;
         }
         if (!empty($post__not_in)) {
-            $query_args['post__not_in'] = [$post__not_in];
+            $query_args['post__not_in'] = $post__not_in;
         }
 
-        if (!empty($tag)) {
+        if (!empty($tags_in)) {
             $tax_query[] = array(
                 'taxonomy' => 'product_tag',
                 'field'    => 'slug',
-                'terms'    => [$tag],
+                'terms'    => $tags_in,
                 'operator'    => 'IN',
             );
         }
-        if (!empty($brand)) {
+        if (!empty($brands_in)) {
             $tax_query[] = array(
                 'taxonomy' => 'product_brand',
                 'field'    => 'slug',
-                'terms'    => [$brand],
-                'operator'    => 'IN',
-            );
-        }
-
-
-
-        if (!empty($category)) {
-            $tax_query[] = array(
-                'taxonomy' => 'product_cat',
-                'field'    => 'slug',
-                'terms'    => [$category],
+                'terms'    => $brands_in,
                 'operator'    => 'IN',
             );
         }
@@ -7093,6 +7400,14 @@ class ComboStoreRest
                 'operator'    => 'IN',
             );
         }
+
+        $tax_query[] = array(
+            'taxonomy' => 'product_visibility',
+            'field'    => 'slug',
+            'terms'    => ['exclude-from-search', 'exclude-from-catalog'],
+            'operator'    => 'NOT IN',
+        );
+
 
 
         if (!empty($per_page)) {
@@ -7117,136 +7432,104 @@ class ComboStoreRest
 
 
 
-        $wp_query = new WP_Query($query_args);
+        /*
+            Feed-sized query. The feed can ask for 1000 products, so nothing here
+            runs per product: price/stock/gallery rows come from cstore_products
+            in one query, thumbnails and terms are primed in bulk, and only the
+            fields the feed uses are returned. The old full-row merge produced
+            ~4 MB of JSON for 1000 products - over Next.js's 2 MB fetch-cache
+            limit, so the feed was never cached and every hit came back here.
+        */
+        $query_args['no_found_rows'] = false;
+        $query_args['update_post_meta_cache'] = true;
+        $query_args['update_post_term_cache'] = true;
 
+
+        $wp_query = new WP_Query($query_args);
+        $posts = $wp_query->posts;
 
         $entries = [];
 
-        if ($wp_query->have_posts()) :
-            $count = 1;
+        if (!empty($posts)) {
+            update_post_thumbnail_cache($wp_query);
 
-            while ($wp_query->have_posts()) : $wp_query->the_post();
+            global $wpdb;
+            $post_ids = array_map('intval', wp_list_pluck($posts, 'ID'));
+            $placeholders = implode(',', array_fill(0, count($post_ids), '%d'));
+            $rows = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT id, product_id, sku, stock_status, stock_count, regular_price, sale_price, gallery
+                     FROM {$wpdb->prefix}cstore_products WHERE product_id IN ($placeholders)",
+                    $post_ids
+                ),
+                ARRAY_A
+            );
+            $rows_by_post = [];
+            foreach ($rows as $row) {
+                $rows_by_post[(int) $row['product_id']] = $row;
+            }
 
-                $post_id = get_the_ID();
-                $postData = get_post($post_id);
+            $term_list = function ($post_id, $taxonomy) {
+                $terms = get_the_terms($post_id, $taxonomy);
+                if (!$terms || is_wp_error($terms)) return [];
+                return array_values(array_map(function ($term) {
+                    return ["name" => $term->name, "slug" => $term->slug];
+                }, $terms));
+            };
 
-                $post_thumbnail_url = get_the_post_thumbnail_url($post_id);
-                $featured = get_post_meta($post_id, 'featured', true);
-                $sku = get_post_meta($post_id, 'sku', true);
-                $sale_price = get_post_meta($post_id, 'sale_price', true);
-                $regular_price = get_post_meta($post_id, 'regular_price', true);
+            foreach ($posts as $postData) {
+                $post_id = (int) $postData->ID;
+                $row = $rows_by_post[$post_id] ?? null;
 
-
-
-
-                $stock_status = get_post_meta($post_id, 'stock_status', true);
-                $stock_count = get_post_meta($post_id, 'stock_count', true);
-                $gallery = get_post_meta($post_id, 'gallery', true);
-                $addons = get_post_meta($post_id, 'addons', true);
-                $downloads = get_post_meta($post_id, 'downloads', true);
-                $weight = get_post_meta($post_id, 'weight', true);
-                $length = get_post_meta($post_id, 'length', true);
-                $width = get_post_meta($post_id, 'width', true);
-                $height = get_post_meta($post_id, 'height', true);
-                $upsells = get_post_meta($post_id, 'upsells', true);
-                $crosssells = get_post_meta($post_id, 'crosssells', true);
-                $faq = get_post_meta($post_id, 'faq', true);
-                $related_products = get_post_meta($post_id, 'related_products', true);
-                $variations = get_post_meta($post_id, 'variations', true);
-
-                $categories = get_the_terms($post_id, 'product_cat');
-                $categories = $categories ? $categories : [];
-
-                $tags = get_the_terms($post_id, 'product_tag');
-                $tags = $tags ? $tags : [];
-
-
-
-
-
-                $categoriesData = [];
-                foreach ($categories as $index => $category) {
-
-
-
-                    $categoriesData[$index] = [
-                        "term_id" => $category->term_id,
-                        "name" => $category->name,
-                        "slug" => $category->slug,
-                    ];
+                /* Block tags become spaces first so paragraphs do not run
+                   together ("PiecesPotty") once the HTML is stripped. */
+                $description = strip_shortcodes(
+                    !empty($postData->post_content) ? $postData->post_content : $postData->post_excerpt
+                );
+                $description = preg_replace('/<\/?(p|br|div|li|ul|ol|h[1-6]|tr|td)\b[^>]*>/i', ' ', (string) $description);
+                $description = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags($description)));
+                if (mb_strlen($description) > $description_length) {
+                    $description = rtrim(mb_substr($description, 0, $description_length - 1)) . '…';
                 }
 
-
-                $tagsData = [];
-                foreach ($tags as $index => $tag) {
-
-                    $tagsData[$index] = [
-                        "term_id" => $tag->term_id,
-                        "name" => $tag->name
-                    ];
+                $gallery = [];
+                if ($row && !empty($row['gallery'])) {
+                    $decoded = json_decode($row['gallery'], true);
+                    foreach (is_array($decoded) ? $decoded : [] as $image) {
+                        if (!empty($image['src'])) $gallery[] = ["src" => $image['src']];
+                    }
                 }
 
-                $post_thumbnail = [
-                    "id" => "",
-                    "title" => "",
-                    "src" => $post_thumbnail_url,
-                ];
-
-                $categories = [];
-                $tags = [];
-                $brands = [];
-                $brands = [];
+                $sale_price = $row ? (float) $row['sale_price'] : 0;
+                $regular_price = $row ? (float) $row['regular_price'] : 0;
 
                 $entries[] = [
-                    "id" => isset($postData->ID) ? $postData->ID : null,
-                    "title" => isset($postData->post_title) ? $postData->post_title : null,
-                    "post_excerpt" => isset($postData->post_excerpt) ? $postData->post_excerpt : "",
-                    "description" => isset($postData->post_content) ? $postData->post_content : "",
-
-                    "slug" => isset($postData->post_name) ? $postData->post_name : null,
-                    "status" => isset($postData->post_status) ? $postData->post_status : null,
-                    "sku" => $sku,
-                    "post_thumbnail" => !empty($post_thumbnail) ? $post_thumbnail : [],
-                    "post_thumbnail_url" => $post_thumbnail_url,
-                    "featured" => $featured,
-                    "sale_price" => $sale_price,
-                    "regular_price" => $regular_price,
-                    "price" => !empty($sale_price) ? $sale_price : $regular_price,
-                    "categories" => $categoriesData,
-                    "tags" => $tagsData,
-                    "brands" => $brands,
-                    "stock_status" => $stock_status,
-                    "stock_count" => $stock_count,
+                    /* cstore_products row id - what the Pixel sends as content_ids.
+                       Products without a row fall back to the post ID, as before. */
+                    "id" => $row ? $row['id'] : (string) $post_id,
+                    "product_id" => $post_id,
+                    "title" => $postData->post_title,
+                    "slug" => $postData->post_name,
+                    "description" => $description,
+                    "post_thumbnail_url" => get_the_post_thumbnail_url($post_id) ?: '',
                     "gallery" => $gallery,
-                    "addons" => $addons,
-                    "downloads" => $downloads,
-                    "weight" => $weight,
-                    "length" => $length,
-                    "width" => $width,
-                    "height" => $height,
-                    "upsells" => $upsells,
-                    "crosssells" => $crosssells,
-                    "faq" => $faq,
-                    "related_products" => $related_products,
-                    "variations" => $variations,
-                    "google_product_category" => "Baby & Toddler > Diapering > Diapers",
-                    "fb_product_category" => "Baby Products > Diapering & Potty Training",
+                    "sku" => $row ? (string) $row['sku'] : '',
+                    "stock_status" => $row ? $row['stock_status'] : '',
+                    "stock_count" => $row ? $row['stock_count'] : null,
+                    "regular_price" => $row ? $row['regular_price'] : '0',
+                    "sale_price" => $row ? $row['sale_price'] : '0',
+                    "price" => $sale_price > 0 ? $sale_price : $regular_price,
+                    "categories" => $term_list($post_id, 'product_cat'),
+                    "tags" => $term_list($post_id, 'product_tag'),
+                    "brands" => $term_list($post_id, 'product_brand'),
                 ];
-
-            endwhile;
-            wp_reset_query();
-
-        else:
-
-
-        endif;
+            }
+        }
 
         $total = $wp_query->found_posts;
-
-
-        $max_pages = ceil($total / $per_page);
+        $response = [];
         $response['total'] = $total;
-        $response['max_pages'] = $max_pages;
+        $response['max_pages'] = $per_page ? ceil($total / $per_page) : 0;
         $response['posts'] = $entries;
 
 
@@ -7481,6 +7764,12 @@ class ComboStoreRest
      */
     public function update_coupon($request)
     {
+        /* A valid token used to be enough: any customer could edit any coupon. */
+        $staff = $this->require_coupon_staff($request);
+        if (is_wp_error($staff)) {
+            return $staff;
+        }
+
 
 
         $token = $request->get_header('Authorization');
@@ -7520,6 +7809,15 @@ class ComboStoreRest
 
 
         $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        /*
+            Only coupons. The user, rider, seller and supplier editors were copies
+            of the coupon editor and sent their person's user ID here, which read
+            (and on save overwrote) whatever post had that number.
+        */
+        if (empty($post_id) || get_post_type($post_id) !== 'coupon') {
+            return new WP_Error('not_a_coupon', 'That is not a coupon', array('status' => 400));
+        }
 
         $post_title = $request->get_param('title');
         $post_status = $request->get_param('postStatus');
@@ -7733,6 +8031,13 @@ class ComboStoreRest
         if (!$user_id) {
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
+
+        /* This lists customers' contact details and spending, so it is for the roles the sidebar shows it to. */
+        $user = get_user_by('id', $user_id);
+
+        if (!$user || !array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to view top customers', array('status' => 403));
+        }
         $body = $request->get_body();
 
         // $body_arr = json_decode($body);
@@ -7806,6 +8111,13 @@ class ComboStoreRest
         if (!$user_id) {
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
+
+        /* Sales and revenue figures, so it is for the roles the sidebar shows it to. */
+        $user = get_user_by('id', $user_id);
+
+        if (!$user || !array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to view top selling products', array('status' => 403));
+        }
         $body = $request->get_body();
 
         // $body_arr = json_decode($body);
@@ -7845,6 +8157,12 @@ class ComboStoreRest
      */
     public function get_coupon($request)
     {
+        /* Any coupon, or any post by ID, used to be readable by anyone. */
+        $staff = $this->require_coupon_staff($request);
+        if (is_wp_error($staff)) {
+            return $staff;
+        }
+
         // $token = $request->get_header('Authorization');
 
 
@@ -7884,6 +8202,15 @@ class ComboStoreRest
 
 
         $post_id     = isset($request['id']) ? absint($request['id']) : "";
+
+        /*
+            Only coupons. The user, rider, seller and supplier editors were copies
+            of the coupon editor and sent their person's user ID here, which read
+            (and on save overwrote) whatever post had that number.
+        */
+        if (empty($post_id) || get_post_type($post_id) !== 'coupon') {
+            return new WP_Error('not_a_coupon', 'That is not a coupon', array('status' => 400));
+        }
 
         $postData = get_post($post_id);
 
@@ -8879,8 +9206,22 @@ class ComboStoreRest
         // $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
 
         $content = $request->get_param('content');
-        $postId = $request->get_param('postId');
+        $postId = absint($request->get_param('postId'));
         $parentId = $request->get_param('parentId');
+
+        /*
+            Reviews and blog comments stay open to anyone logged in. A ticket is a
+            private conversation, so only staff and the ticket's owner may reply.
+            The id is cast above: "123abc" would otherwise pass as "not a ticket"
+            here and still be saved against post 123.
+        */
+        if (get_post_type($postId) === 'ticket') {
+            $is_owner = (int) get_post_field('post_author', $postId) === (int) $user_id;
+
+            if (!$user || (!$is_owner && !$this->is_ticket_staff($user))) {
+                return new WP_Error('forbidden', 'You are not allowed to reply to this ticket', array('status' => 403));
+            }
+        }
         $rate = $request->get_param('rate');
 
         // Only a numeric 1-5 value counts as a rating, anything else is a plain comment.
@@ -8950,7 +9291,7 @@ class ComboStoreRest
         }
 
         // Recalculate the rating from the stored ratings, so the average can never drift.
-        if ($rate && $postType == 'product') {
+        if ($rate && $postType == 'cmb_product') {
 
             $rating = $this->calculate_post_rating($postId);
 
@@ -9236,6 +9577,64 @@ class ComboStoreRest
             $comment_args['order'] = $order;
         }
 
+        /*
+            Optional filters, used by the dashboard's Comments screen. Callers that
+            send none of them (the storefront, Reviews) get what they always got.
+        */
+        $filter_post_type = isset($request['post_type']) ? sanitize_key($request['post_type']) : '';
+        $filter_type      = isset($request['type']) ? sanitize_key($request['type']) : '';
+        $filter_keyword   = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : '';
+
+        if (!empty($filter_post_type)) {
+            $comment_args['post_type'] = $filter_post_type;
+        }
+        if (!empty($filter_type)) {
+            /* WP_Comment_Query's "comment" also matches the empty type older comments carry. */
+            $comment_args['type'] = $filter_type;
+        }
+        if (!empty($filter_keyword)) {
+            $comment_args['search'] = $filter_keyword;
+        }
+
+
+        /*
+            Reviews and blog comments stay public, so this is not a login check on
+            the whole endpoint: only ticket comments need one. Anyone not logged in
+            simply counts as not staff here.
+        */
+        $viewer = $this->get_ticket_user($request);
+        $is_staff = !is_wp_error($viewer) && $this->is_ticket_staff($viewer);
+
+        /*
+            Pending, spam and trashed comments are for moderators only; everyone
+            else keeps seeing approved comments whatever they ask for.
+        */
+        $is_moderator = !is_wp_error($viewer) && (bool) array_intersect(['administrator', 'store_manager'], (array) $viewer->roles);
+        $filter_status = isset($request['status']) ? sanitize_key($request['status']) : '';
+
+        if ($is_moderator && in_array($filter_status, ['all', 'approve', 'hold', 'spam', 'trash'], true)) {
+            $comment_args['status'] = $filter_status;
+        }
+
+        if (!empty($post_id) && get_post_type($post_id) === 'ticket') {
+            if (is_wp_error($viewer)) {
+                return $viewer;
+            }
+
+            if (!$is_staff && (int) get_post_field('post_author', $post_id) !== (int) $viewer->ID) {
+                return new WP_Error('forbidden', 'You are not allowed to view these comments', array('status' => 403));
+            }
+        }
+
+        /* With no post_id this lists every comment, so tickets must be left out. */
+        if (empty($post_id) && !$is_staff) {
+            $comment_args['post__not_in'] = get_posts([
+                'post_type'      => 'ticket',
+                'post_status'    => 'any',
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            ]);
+        }
 
         $response = [];
 
@@ -9251,7 +9650,22 @@ class ComboStoreRest
                 $rate = get_comment_meta($comment->comment_ID, 'rate', true);
 
                 $comment->avatar = get_avatar_url($comment->comment_author_email);
+
+                /* A commenter's email and IP are for staff, not for the public response. */
+                if (!$is_staff) {
+                    $comment->comment_author_email = '';
+                    $comment->comment_author_IP = '';
+                    $comment->comment_agent = '';
+                }
+
                 $comment->rate = $rate;
+
+                /* What the comment is on, for the dashboard's list. */
+                if ($is_moderator) {
+                    $comment->post_title = get_the_title($comment->comment_post_ID);
+                    $comment->post_type = get_post_type($comment->comment_post_ID);
+                }
+
                 $comments_list[] = $comment;
             }
         }
@@ -9260,8 +9674,72 @@ class ComboStoreRest
 
         $response['comments'] = $comments_list;
 
+        /* The same query counted, so a list can page through it. */
+        $count_args = $comment_args;
+        unset($count_args['number'], $count_args['paged'], $count_args['offset']);
+        $count_args['count'] = true;
+
+        $total = (int) (new WP_Comment_Query)->query($count_args);
+
+        $response['total'] = $total;
+        $response['max_pages'] = $per_page > 0 ? (int) ceil($total / $per_page) : 1;
+
 
         die(wp_json_encode($response));
+    }
+
+    /**
+     * Approve, unapprove, spam, trash or restore comments.
+     *
+     * For the dashboard's Comments screen. Order notes and ticket replies are
+     * comments too, but they have their own screens and are left alone here.
+     *
+     * @param WP_REST_Request $request ids[] and action.
+     */
+    public function moderate_comments($request)
+    {
+        $user = $this->get_ticket_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        if (!array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to moderate comments', array('status' => 403));
+        }
+
+        $action = isset($request['action']) ? sanitize_key($request['action']) : '';
+        $allowed = ['approve', 'hold', 'spam', 'trash', 'untrash', 'unspam'];
+
+        if (!in_array($action, $allowed, true)) {
+            return new WP_Error('invalid_action', 'Unknown action', array('status' => 400));
+        }
+
+        $ids = isset($request['ids']) && is_array($request['ids']) ? array_filter(array_map('absint', $request['ids'])) : [];
+
+        $done = 0;
+        $skipped = 0;
+
+        foreach ($ids as $id) {
+            $comment = get_comment($id);
+
+            if (!$comment || $comment->comment_type === 'order_note' || get_post_type($comment->comment_post_ID) === 'ticket') {
+                $skipped++;
+                continue;
+            }
+
+            if ($action === 'untrash') {
+                $ok = wp_untrash_comment($id);
+            } elseif ($action === 'unspam') {
+                $ok = wp_unspam_comment($id);
+            } else {
+                $ok = wp_set_comment_status($id, $action);
+            }
+
+            $ok ? $done++ : $skipped++;
+        }
+
+        die(wp_json_encode(['success' => true, 'done' => $done, 'skipped' => $skipped]));
     }
     /**
      * Return Posts
@@ -9416,6 +9894,16 @@ class ComboStoreRest
         $userRoles = isset($user->roles) ? $user->roles : [];
         $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
+        /*
+            Any valid token used to be enough, and any comment ID was accepted,
+            so a customer could permanently delete any order note, review, blog
+            comment or ticket reply. Only the roles the order's Notes tab offers
+            Delete to (OrderNotes.jsx) may use it, and only on order notes.
+        */
+        if (!array_intersect(['administrator', 'rider'], (array) $userRoles)) {
+            return new WP_Error('forbidden', 'You are not allowed to delete order notes', array('status' => 403));
+        }
+
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
@@ -9433,6 +9921,12 @@ class ComboStoreRest
         if (empty($comment_id)) {
             $response['success'] = false;
             die(wp_json_encode($response));
+        }
+
+        $comment = get_comment($comment_id);
+
+        if (!$comment || $comment->comment_type !== 'order_note') {
+            return new WP_Error('not_an_order_note', 'That is not an order note', array('status' => 400));
         }
 
 
@@ -9467,6 +9961,12 @@ class ComboStoreRest
      */
     public function add_coupon($request)
     {
+        /* Anyone could create coupons; this had no login check at all. */
+        $staff = $this->require_coupon_staff($request);
+        if (is_wp_error($staff)) {
+            return $staff;
+        }
+
         // $token = $request->get_header('Authorization');
 
 
@@ -9517,11 +10017,35 @@ class ComboStoreRest
 
         $inserted = wp_insert_post($data);
 
+        /* The new coupon's ID, so the dashboard can open it straight away. */
+        $response['id'] = is_wp_error($inserted) ? 0 : (int) $inserted;
+
         $response['success'] = true;
 
 
         die(wp_json_encode($response));
     }
+    /**
+     * The logged-in administrator or store manager, for the coupon endpoints.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_User|WP_Error
+     */
+    private function require_coupon_staff($request)
+    {
+        $user = $this->get_ticket_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        if (!array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to manage coupons', array('status' => 403));
+        }
+
+        return $user;
+    }
+
     /**
      * Return Posts
      *
@@ -9530,6 +10054,12 @@ class ComboStoreRest
      */
     public function get_coupons($request)
     {
+        /* Every coupon code, drafts included, used to be listed to anyone who asked. */
+        $staff = $this->require_coupon_staff($request);
+        if (is_wp_error($staff)) {
+            return $staff;
+        }
+
         // $token = $request->get_header('Authorization');
 
 
@@ -9712,7 +10242,7 @@ class ComboStoreRest
 
 
         if (!empty($post_slug)) {
-            $post = get_page_by_path($post_slug, OBJECT, "product");
+            $post = get_page_by_path($post_slug, OBJECT, "cmb_product");
             $post_id = $post ? $post->ID : null;
         }
 
@@ -9928,6 +10458,7 @@ class ComboStoreRest
 
             $productData['variations'] = $variations;
             $productData['price'] = $price;
+            unset($product_data['id']);
 
             $response['product'] = array_merge($productData, $product_data);
         } else {
@@ -10227,6 +10758,12 @@ class ComboStoreRest
         $userRoles = isset($user->roles) ? $user->roles : [];
         $isAdmin = in_array('administrator', $userRoles) ? true : false;
 
+        /* Any valid token used to be enough - a customer's too. Only the roles
+           the Products menu is open to may. */
+        if (!array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to add products', array('status' => 403));
+        }
+
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
@@ -10236,8 +10773,8 @@ class ComboStoreRest
 
 
         $data = [
-            'post_title'      => 'Sample Product Title',
-            'post_type'      => 'product',
+            'post_title'      => 'New product',
+            'post_type'      => 'cmb_product',
             'post_status'      => 'draft',
 
         ];
@@ -10248,9 +10785,19 @@ class ComboStoreRest
 
         $ComboStoreProduct = new ComboStoreProduct();
 
-        $body_arr['post_id'] = $post_id;
+        if (!$post_id || is_wp_error($post_id)) {
+            die(wp_json_encode(array('success' => false, 'message' => 'The product could not be created.')));
+        }
+
+        /* insert_product reads product_id; this passed post_id, so a new product
+           never got its row in cstore_products (prices, stock, SKU). */
+        $body_arr = is_array($body_arr) ? $body_arr : array();
+        $body_arr['product_id'] = $post_id;
+        /* The live table will not take NULL ratings, which is what insert_product sends by default. */
+        $body_arr += array('total_rate' => 0, 'avg_rating' => 0);
 
         $ComboStoreProduct->insert_product($body_arr);
+        $response['id'] = (int) $post_id;
 
         $response['success'] = true;
 
@@ -10395,6 +10942,119 @@ class ComboStoreRest
 
 
         $ComboStoreProduct->update_product($body_arr);
+
+
+
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * Return Posts
+     *
+     * @since 1.0.0
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_post($request)
+    {
+
+
+        $token = $request->get_header('Authorization');
+
+
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        // Remove "Bearer " prefix if present
+        $token = str_replace('Bearer ', '', $token);
+
+
+        // Decode the token
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+
+        // Get user by ID
+        // $user = get_user_by('id', $decoded_token->sub);
+
+
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+        $body = $request->get_body();
+
+        // $body_arr = json_decode($body);
+        $body_arr = json_decode($body, true);
+
+
+        $post_id     = isset($request['id']) ? sanitize_text_field($request['id']) : 0;
+
+        $post_title = $request->get_param('title');
+        $post_slug = $request->get_param('slug');
+        $post_content = $request->get_param('post_content');
+        $post_excerpt = $request->get_param('post_excerpt');
+        $post_status = $request->get_param('postStatus');
+        $comment_status = $request->get_param('comment_status');
+        $post_parent = $request->get_param('post_parent');
+        $menu_order = $request->get_param('menu_order');
+        $categories = $request->get_param('categories');
+
+        $tags = $request->get_param('tags');
+
+
+        $tags = $tags ? $tags : [];
+
+        $categories = $categories ? $categories : [];
+
+
+        $post_thumbnail = $request->get_param('post_thumbnail');
+        $post_thumbnail_id = isset($post_thumbnail['id']) ? $post_thumbnail['id'] : '';
+
+        $featured = $request->get_param('featured');
+
+
+        $categoryIds = [];
+        foreach ($categories as $category) {
+            $categoryIds[] = $category['term_id'];
+        }
+
+
+
+        $tagIds = [];
+        foreach ($tags as $tag) {
+            $tagIds[] = $tag['name'];
+        }
+
+
+
+        $response = [];
+        $postData = [
+            "ID" => $post_id,
+            "post_title" => $post_title,
+            "post_name" => $post_slug,
+            "post_content" => $post_content,
+            "post_excerpt" => $post_excerpt,
+            "post_status" => $post_status,
+            "comment_status" => $comment_status,
+            "post_parent" => $post_parent,
+            "menu_order" => $menu_order,
+        ];
+        wp_update_post($postData);
+
+        wp_set_post_terms($post_id, $categoryIds, 'category');
+        wp_set_post_terms($post_id, $tagIds, 'post_tag');
+
+
+
+
+        set_post_thumbnail($post_id, $post_thumbnail_id);
 
 
 
@@ -10997,6 +11657,14 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough, a customer's too. Only the roles the
+           Expenses menu is open to may create expenses. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to create expenses', array('status' => 403));
+        }
+
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
 
@@ -11027,7 +11695,7 @@ class ComboStoreRest
         if (isset($order_response['success'])) {
             $response['status'] = "success";
             $response['id'] = $order_id;
-            $response['message'] = "Purchased Successful.";
+            $response['message'] = "Expense added Successful.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -11104,7 +11772,7 @@ class ComboStoreRest
         if (isset($order_response['success'])) {
             $response['status'] = "success";
             $response['id'] = $order_id;
-            $response['message'] = "Purchased Successful.";
+            $response['message'] = "Template Part added Successful.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -11181,7 +11849,7 @@ class ComboStoreRest
         if (isset($order_response['success'])) {
             $response['status'] = "success";
             $response['id'] = $order_id;
-            $response['message'] = "Purchased Successful.";
+            $response['message'] = "Template Installed Successful.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -11239,8 +11907,21 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough, a customer's too. Only the roles the
+           Purchases menu is open to may create purchases. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to create purchases', array('status' => 403));
+        }
+
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
+
+        /* The creator, as create_expense does. It was only stored when the request sent
+           it - the page never does - so purchases had no owner and a store manager's
+           list (filtered by user_id) stayed empty. */
+        $body_arr['user_id'] = $user_id;
 
 
         // $user_id = 1;
@@ -11268,7 +11949,7 @@ class ComboStoreRest
         if (isset($order_response['success'])) {
             $response['status'] = "success";
             $response['id'] = $order_id;
-            $response['message'] = "Purchased Successful.";
+            $response['message'] = "Purchase added Successful.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -11415,18 +12096,20 @@ class ComboStoreRest
 
         $body_arr = json_decode($body, true);
 
-
-        $user_id = 1;
-
+        /* Changing a subscription is a staff action. This used to accept any
+           signed-in user (and then overwrote the id with `$user_id = 1`). */
+        $editor = get_user_by('id', $user_id);
+        $editorRoles = $editor ? (array) $editor->roles : [];
+        if (!in_array('administrator', $editorRoles, true) && !in_array('store_manager', $editorRoles, true)) {
+            return new WP_Error('forbidden', 'Only store staff can update subscriptions', array('status' => 403));
+        }
 
         $response = [];
 
-        $gmt_offset = get_option('gmt_offset');
-        $datetime = gmdate('Y-m-d H:i:s', strtotime('+' . $gmt_offset . ' hour'));
         $ComboStoreSubscriptions = new ComboStoreSubscriptions();
 
 
-        $_response = $ComboStoreSubscriptions->update_subscription($body_arr);
+        $_response = $ComboStoreSubscriptions->update_subscription(is_array($body_arr) ? $body_arr : []);
 
 
         if ($_response) {
@@ -11997,6 +12680,11 @@ class ComboStoreRest
         if ($_response['success']) {
             $response['status'] = "success";
             $response['message'] = "Order updated.";
+
+            /* Stock notes from completing (shortfalls) or refunding (what went back). */
+            if (!empty($_response['stock_notes'])) {
+                $response['message'] .= ' Stock: ' . implode(' ', $_response['stock_notes']);
+            }
         } else {
             $response['status'] = "failed";
             $response['message'] = $_response['message'] ?? "There is an error.";
@@ -12269,6 +12957,13 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough to change any order, a customer's too. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !$this->is_ticket_staff($requester)) {
+            return new WP_Error('forbidden', 'You are not allowed to update orders', array('status' => 403));
+        }
+
         $body = $request->get_body();
 
 
@@ -12290,6 +12985,7 @@ class ComboStoreRest
         if ($_response) {
             $response['status'] = "success";
             $response['message'] = "Order updated.";
+            $response['updated'] = isset($_response['updated']) ? (int) $_response['updated'] : null;
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -12342,6 +13038,15 @@ class ComboStoreRest
 
         if (!$user_id) {
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        /* Any valid token used to be enough to change any of these, a customer's
+           too - and completing a purchase now moves stock. Only the roles the
+           Purchases menu is open to may. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to change purchases', array('status' => 403));
         }
 
         $body = $request->get_body();
@@ -12409,6 +13114,15 @@ class ComboStoreRest
 
         if (!$user_id) {
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        /* Any valid token used to be enough to change any of these, a customer's
+           too - and completing a purchase now moves stock. Only the roles the
+           Expenses menu is open to may. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to change expenses', array('status' => 403));
         }
 
         $body = $request->get_body();
@@ -12498,7 +13212,7 @@ class ComboStoreRest
 
         if ($_response) {
             $response['status'] = "success";
-            $response['message'] = "Expense updated.";
+            $response['message'] = "Template part updated.";
         } else {
             $response['status'] = "failed";
             $response['message'] = "There is an error.";
@@ -12952,8 +13666,18 @@ class ComboStoreRest
         $ComboStoreSubscriptions = new ComboStoreSubscriptions();
 
 
-        $response = $ComboStoreSubscriptions->get_subscription($id, $by);
+        $response = $ComboStoreSubscriptions->get_subscription($id, $by === 'order_id' ? 'order_id' : 'id');
 
+        /* Staff see any subscription; anyone else only their own. Without
+           this any signed-in customer could read any customer's record. */
+        $viewer = get_user_by('id', $user_id);
+        $viewerRoles = $viewer ? (array) $viewer->roles : [];
+        $isStaff = in_array('administrator', $viewerRoles, true) || in_array('store_manager', $viewerRoles, true);
+        $ownerId = isset($response['subscription']['userid']) ? absint($response['subscription']['userid']) : 0;
+
+        if (!$isStaff && !empty($response['subscription']) && $ownerId !== absint($user_id)) {
+            return new WP_Error('forbidden', 'You cannot view this subscription', array('status' => 403));
+        }
 
         die(wp_json_encode($response));
     }
@@ -14609,6 +15333,75 @@ class ComboStoreRest
         die(wp_json_encode($response));
     }
     /**
+     * Save a site template's name, description, thumbnail, style and meta (its
+     * fonts and colors, from the builder's Template Settings). Requires a JWT,
+     * as update_template_part does.
+     *
+     * The meta ends up in a <style> on every storefront page, so its strings
+     * lose anything that could end a CSS rule or the tag (the storefront cleans
+     * each value again, in lib/templateTheme.js).
+     *
+     * @param WP_REST_Request $request
+     */
+    public function update_template($request)
+    {
+        $token = $request->get_header('Authorization');
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+        $token = str_replace('Bearer ', '', $token);
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+        if (!$user_id) {
+            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        $body_arr = json_decode($request->get_body(), true);
+        if (!is_array($body_arr) || empty($body_arr['id'])) {
+            die(wp_json_encode(['success' => false, 'message' => 'Template id is required.']));
+        }
+
+        if (isset($body_arr['meta']) && is_array($body_arr['meta'])) {
+            array_walk_recursive($body_arr['meta'], function (&$value) {
+                if (is_string($value)) {
+                    /* Not ';' - Google Fonts links use it between weights (wght@400;700). */
+                    $value = trim(str_replace(['<', '>', '{', '}', '\\'], '', $value));
+                }
+            });
+        }
+
+        $ComboStoreTemplateParts = new ComboStoreTemplateParts();
+        $response = $ComboStoreTemplateParts->update_template($body_arr);
+
+        die(wp_json_encode($response));
+    }
+    /**
+     * The active site template's settings: { id, meta }, meta being the
+     * template's fonts, typography and colors from the builder's Template
+     * Settings. Public and small, for the storefront's <head> on every page.
+     *
+     * @param WP_REST_Request $request
+     */
+    public function get_template_settings($request)
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cstore_templates';
+        $combo_store_settings = get_option('combo_store_settings', []);
+        $template_id = isset($combo_store_settings['site_template']['template_id']) ? absint($combo_store_settings['site_template']['template_id']) : 0;
+
+        $raw = $template_id ? $wpdb->get_var($wpdb->prepare("SELECT meta FROM $table WHERE id = %d", $template_id)) : '';
+        $meta = $raw ? json_decode($raw, true) : [];
+
+        die(wp_json_encode([
+            'id'   => $template_id,
+            'meta' => (object) (is_array($meta) ? $meta : []),
+        ], JSON_UNESCAPED_UNICODE));
+    }
+    /**
      * Return Posts
      *
      * @since 1.0.0
@@ -15810,6 +16603,16 @@ class ComboStoreRest
 
         $id     = isset($request['id']) ? sanitize_text_field($request['id']) : '';
 
+        /*
+         * Staff look customers up by id from the dashboard. Anyone else gets
+         * their own profile, whatever id they send: this used to return any
+         * user's details to any logged-in user who asked for their id.
+         */
+        $requester = get_user_by('id', $user_id);
+        if (!$requester || !$this->is_ticket_staff($requester)) {
+            $id = $user_id;
+        }
+
         if (empty($id)) {
             $response['errors'] = 'User id empty';
             die(wp_json_encode($response));
@@ -15880,6 +16683,79 @@ class ComboStoreRest
 
 
     /**
+     * Change a password.
+     *
+     * The dashboard's and storefront's password boxes (CustomerProfile,
+     * UserAccount) posted here for years, but nothing was registered at this
+     * route, so every attempt was a 404 and no password ever changed.
+     *
+     *  - Your own password: the current one is required and checked.
+     *  - Someone else's: administrators only, no current password needed,
+     *    and never another administrator's.
+     *
+     * Answers 200 with { success } or { errors } (the boxes show either text);
+     * a missing or bad login is a 401.
+     *
+     * @param WP_REST_Request $request id, old_password, new_password.
+     */
+    public function update_user_password($request)
+    {
+        $requester = $this->get_ticket_user($request);
+
+        if (is_wp_error($requester)) {
+            return $requester;
+        }
+
+        $target_id    = isset($request['id']) ? absint($request['id']) : 0;
+        $old_password = isset($request['old_password']) ? (string) $request['old_password'] : '';
+        $new_password = isset($request['new_password']) ? (string) $request['new_password'] : '';
+
+        if (!$target_id) {
+            $target_id = (int) $requester->ID;
+        }
+
+        $answer = function ($errors, $success = '') {
+            die(wp_json_encode(['success' => $success, 'errors' => $errors]));
+        };
+
+        $target = get_user_by('id', $target_id);
+
+        if (!$target) {
+            $answer('User not found.');
+        }
+
+        /* Passwords are taken as typed: sanitising them would change them. */
+        if (strlen($new_password) < 8) {
+            $answer('The new password must be at least 8 characters.');
+        }
+
+        $is_self = (int) $target->ID === (int) $requester->ID;
+
+        if ($is_self) {
+            if ($old_password === '' || !wp_check_password($old_password, $target->user_pass, $target->ID)) {
+                $answer('The current password is not correct.');
+            }
+
+            if (hash_equals($old_password, $new_password)) {
+                $answer('The new password is the same as the current one.');
+            }
+        } else {
+            if (!in_array('administrator', (array) $requester->roles, true)) {
+                $answer("Only an administrator can set another person's password.");
+            }
+
+            if (in_array('administrator', (array) $target->roles, true)) {
+                $answer("An administrator's password can only be changed by that administrator.");
+            }
+        }
+
+        /* Also signs the account out of its WordPress sessions. */
+        wp_set_password($new_password, $target->ID);
+
+        $answer('', $is_self ? 'Your password was changed.' : 'The password was changed. Let them know their new password.');
+    }
+
+    /**
      * Return Posts
      *
      * @since 1.0.0
@@ -15932,66 +16808,92 @@ class ComboStoreRest
 
 
         $id     = isset($body_arr['id']) ? sanitize_text_field($body_arr['id']) : '';
-        $userData     = isset($body_arr['userData']) ? ($body_arr['userData']) : [];
+        $userData     = isset($body_arr['userData']) && is_array($body_arr['userData']) ? ($body_arr['userData']) : [];
 
+        /*
+         * Staff edit customers by id from the dashboard. Anyone else can only
+         * save their own profile: this used to write to whatever id the
+         * request named, so one customer could overwrite another's details.
+         */
+        $requester = get_user_by('id', $user_id);
+        if (!$requester || !$this->is_ticket_staff($requester)) {
+            $id = $user_id;
+        }
 
+        if (empty($id) || !get_user_by('id', $id)) {
+            $response['error'] = true;
+            $response['message'] = 'User not found';
+            die(wp_json_encode($response));
+        }
 
-        $name     = isset($userData['name']) ? sanitize_text_field($userData['name']) : '';
-        $first_name     = isset($userData['first_name']) ? sanitize_text_field($userData['first_name']) : '';
-        $last_name     = isset($userData['last_name']) ? sanitize_text_field($userData['last_name']) : '';
-        $email     = isset($userData['email']) ? sanitize_email($userData['email']) : '';
-        $customer_category     = isset($userData['customer_category']) ? sanitize_text_field($userData['customer_category']) : '';
-        $income     = isset($userData['income']) ? sanitize_text_field($userData['income']) : '';
-        $profession     = isset($userData['profession']) ? sanitize_text_field($userData['profession']) : '';
-        $has_orderd     = isset($userData['has_orderd']) ? sanitize_text_field($userData['has_orderd']) : '';
+        /*
+         * Only the fields the request actually carries are written. Every
+         * field used to be saved, with a missing one stored as empty, so a
+         * form that sent a few fields blanked all the rest - the storefront
+         * profile page wiped shipping details, profession and the like on
+         * every save. A field sent empty (or null) is still cleared.
+         */
+        $has = function ($key) use ($userData) {
+            return array_key_exists($key, $userData);
+        };
 
-
-
-        $phone     = isset($userData['phone']) ? sanitize_text_field($userData['phone']) : '';
-        $phones     = isset($userData['phones']) ? stripslashes_deep($userData['phones']) : [];
-        $kids     = isset($userData['kids']) ? stripslashes_deep($userData['kids']) : [];
-        $addresses     = isset($userData['addresses']) ? stripslashes_deep($userData['addresses']) : [];
-        $billing_address1     = isset($userData['billing_address1']) ? sanitize_text_field($userData['billing_address1']) : '';
-        $billing_address2     = isset($userData['billing_address2']) ? sanitize_text_field($userData['billing_address2']) : '';
-        $zip_code     = isset($userData['zip_code']) ? sanitize_text_field($userData['zip_code']) : '';
-        $delivery_location     = isset($userData['delivery_location']) ? stripslashes_deep($userData['delivery_location']) : '';
-
-        $billing_name     = isset($userData['billing_name']) ? sanitize_text_field($userData['billing_name']) : '';
-        $billing_address1     = isset($userData['billing_address1']) ? sanitize_text_field($userData['billing_address1']) : '';
-        $billing_address2     = isset($userData['billing_address2']) ? sanitize_text_field($userData['billing_address2']) : '';
-        $billing_phone     = isset($userData['billing_phone']) ? sanitize_text_field($userData['billing_phone']) : '';
-        $billing_email     = isset($userData['billing_email']) ? sanitize_text_field($userData['billing_email']) : '';
-        $billing_country     = isset($userData['billing_country']) ? sanitize_text_field($userData['billing_country']) : '';
-        $billing_city     = isset($userData['billing_city']) ? sanitize_text_field($userData['billing_city']) : '';
-
-        $shipping_name     = isset($userData['shipping_name']) ? sanitize_text_field($userData['shipping_name']) : '';
-        $shipping_address1     = isset($userData['shipping_address1']) ? sanitize_text_field($userData['shipping_address1']) : '';
-        $shipping_address2     = isset($userData['shipping_address2']) ? sanitize_text_field($userData['shipping_address2']) : '';
-        $shipping_phone     = isset($userData['shipping_phone']) ? sanitize_text_field($userData['shipping_phone']) : '';
-        $shipping_email     = isset($userData['shipping_email']) ? sanitize_text_field($userData['shipping_email']) : '';
-        $shipping_country     = isset($userData['shipping_country']) ? sanitize_text_field($userData['shipping_country']) : '';
-        $shipping_city     = isset($userData['shipping_city']) ? sanitize_text_field($userData['shipping_city']) : '';
-
-
-
-
-
-
-        $userdata = array(
-            'ID'          => $id,
-            'first_name'  => $first_name,
-            'last_name'   => $last_name,
-            'display_name' => $name,
-            'user_email' => $email,
+        $text_fields = array(
+            'phone',
+            'billing_name',
+            'billing_address1',
+            'billing_address2',
+            'billing_phone',
+            'billing_email',
+            'billing_country',
+            'billing_city',
+            'shipping_name',
+            'shipping_address1',
+            'shipping_address2',
+            'shipping_phone',
+            'shipping_email',
+            'shipping_country',
+            'shipping_city',
+            'zip_code',
+            'customer_category',
+            'income',
+            'profession',
+            'has_orderd',
         );
 
+        $userdata = array('ID' => $id);
 
-        $result = wp_update_user($userdata);
+        if ($has('first_name')) {
+            $userdata['first_name'] = sanitize_text_field((string) $userData['first_name']);
+        }
+        if ($has('last_name')) {
+            $userdata['last_name'] = sanitize_text_field((string) $userData['last_name']);
+        }
+        if ($has('name') && trim((string) $userData['name']) !== '') {
+            $userdata['display_name'] = sanitize_text_field((string) $userData['name']);
+        }
+        /* An empty email is never written: it is the account's login. */
+        if ($has('email') && sanitize_email((string) $userData['email']) !== '') {
+            $userdata['user_email'] = sanitize_email((string) $userData['email']);
+        }
 
-        update_user_meta($id, 'first_name', $first_name);
-        update_user_meta($id, 'last_name', $last_name);
-        update_user_meta($id, 'phone', $phone);
-        update_user_meta($id, 'delivery_location', $delivery_location);
+        $result = count($userdata) > 1 ? wp_update_user($userdata) : $id;
+
+        if ($has('first_name')) {
+            update_user_meta($id, 'first_name', $userdata['first_name']);
+        }
+        if ($has('last_name')) {
+            update_user_meta($id, 'last_name', $userdata['last_name']);
+        }
+
+        foreach ($text_fields as $field) {
+            if ($has($field)) {
+                update_user_meta($id, $field, sanitize_text_field((string) $userData[$field]));
+            }
+        }
+
+        if ($has('delivery_location')) {
+            update_user_meta($id, 'delivery_location', $userData['delivery_location'] ? stripslashes_deep($userData['delivery_location']) : '');
+        }
 
         if (isset($userData['phones']) && is_array($userData['phones'])) {
             update_user_meta($id, 'phones', $userData['phones']);
@@ -15999,33 +16901,9 @@ class ComboStoreRest
         if (isset($userData['addresses']) && is_array($userData['addresses'])) {
             update_user_meta($id, 'addresses', $userData['addresses']);
         }
-
-
         if (isset($userData['kids']) && is_array($userData['kids'])) {
             update_user_meta($id, 'kids', $userData['kids']);
         }
-
-
-        update_user_meta($id, 'customer_category', $customer_category);
-        update_user_meta($id, 'income', $income);
-        update_user_meta($id, 'profession', $profession);
-        update_user_meta($id, 'has_orderd', $has_orderd);
-
-        update_user_meta($id, 'billing_name', $billing_name);
-        update_user_meta($id, 'billing_address1', $billing_address1);
-        update_user_meta($id, 'billing_address2', $billing_address2);
-        update_user_meta($id, 'billing_phone', $billing_phone);
-        update_user_meta($id, 'billing_email', $billing_email);
-        update_user_meta($id, 'billing_country', $billing_country);
-        update_user_meta($id, 'billing_city', $billing_city);
-
-        update_user_meta($id, 'shipping_name', $shipping_name);
-        update_user_meta($id, 'shipping_address1', $shipping_address1);
-        update_user_meta($id, 'shipping_address2', $shipping_address2);
-        update_user_meta($id, 'shipping_phone', $shipping_phone);
-        update_user_meta($id, 'shipping_email', $shipping_email);
-        update_user_meta($id, 'shipping_country', $shipping_country);
-        update_user_meta($id, 'shipping_city', $shipping_city);
 
 
         if (is_wp_error($result)) {
@@ -16091,11 +16969,27 @@ class ComboStoreRest
 
 
         $role     = isset($request['role']) ? sanitize_text_field($request['role']) : 'any';
+
+        /*
+            Any valid token used to be enough to list every account, emails
+            included. Staff may list any role; a rider may list riders (the
+            delivery screen's rider picker); nobody else may list users.
+        */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !$this->is_ticket_staff($requester)) {
+            $is_rider = $requester && in_array('rider', (array) $requester->roles, true);
+
+            if (!$is_rider || $role !== 'rider') {
+                return new WP_Error('forbidden', 'You are not allowed to list users', array('status' => 403));
+            }
+        }
         $search     = isset($request['search']) ? sanitize_text_field($request['search']) : "";
         $number     = isset($request['number']) ? sanitize_text_field($request['number']) : "";
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
         $paged      = isset($request['paged']) ? sanitize_text_field($request['paged']) : 1;
+        $with_orders = !empty($request['with_orders']);
 
         $prevText = !empty($request['prevText']) ? $request['prevText'] : "";
         $nextText = !empty($request['nextText']) ? $request['nextText'] : "";
@@ -16173,6 +17067,10 @@ class ComboStoreRest
                 $user_data->billing_city = $billing_city ? $billing_city : '';
                 $user_data->billing_country = $billing_country ? $billing_country : '';
 
+                if ($with_orders) {
+                    $user_data->registered = $user->user_registered;
+                }
+
 
 
 
@@ -16181,12 +17079,30 @@ class ComboStoreRest
                 $posts[] = $user_data;
             endforeach;
 
+            /* Only the Customers list asks for this, so the pickers do not pay for it. */
+            if ($with_orders) {
+                global $wpdb;
+
+                $ids = array_map('intval', wp_list_pluck($posts, 'id'));
+                $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+
+                $order_counts = $wpdb->get_results($wpdb->prepare(
+                    "SELECT userid, COUNT(*) AS total_orders FROM {$wpdb->prefix}cstore_orders WHERE userid IN ($placeholders) GROUP BY userid",
+                    $ids
+                ), OBJECT_K);
+
+                foreach ($posts as $post) {
+                    $post->total_orders = isset($order_counts[$post->id]) ? (int) $order_counts[$post->id]->total_orders : 0;
+                }
+            }
+
             $total = $user_search->get_total();
 
 
 
 
-            $max_pages = ceil($total / $number);
+            /* `number` is optional; dividing by the empty string was a fatal error on PHP 8. */
+            $max_pages = absint($number) > 0 ? ceil($total / absint($number)) : 1;
 
 
             $responses['total'] = $total;
@@ -16361,7 +17277,36 @@ class ComboStoreRest
 
         $registerBy     = isset($request['registerBy']) ? sanitize_text_field($request['registerBy']) : '';
         $password     = isset($request['password']) ? sanitize_text_field($request['password']) : '';
-        $role     = isset($request['role']) ? sanitize_text_field($request['role']) : '';
+        $requested_role     = isset($request['role']) ? sanitize_text_field($request['role']) : '';
+
+        /*
+         * Who may choose the new account's role. This endpoint is public (it is
+         * the storefront's sign-up), and it used to give the account whatever
+         * role the request named - so anyone could post "administrator" and
+         * get an admin account. Now:
+         *  - without a staff login, the account is always a customer;
+         *  - only an administrator may create any other kind of account
+         *    (rider, store manager, support agent, seller, supplier...).
+         *    Any staff role used to be enough, so a support agent could make
+         *    store managers; the dashboard lists that create staff are
+         *    administrator-only anyway.
+         */
+        $role = 'customer';
+
+        if ($requested_role !== '' && $requested_role !== 'customer') {
+
+            $requester = $request->get_header('Authorization') ? $this->get_ticket_user($request) : null;
+
+            if (!$requester || is_wp_error($requester) || !in_array('administrator', (array) $requester->roles, true)) {
+                die(wp_json_encode(wp_json_encode(array('error' => true, 'messages' => array('Only an administrator can create this kind of account.')))));
+            }
+
+            if (!get_role($requested_role)) {
+                die(wp_json_encode(wp_json_encode(array('error' => true, 'messages' => array('Unknown role.')))));
+            }
+
+            $role = $requested_role;
+        }
 
 
         $ComboStoreRegister = new ComboStoreRegister();
@@ -16424,8 +17369,21 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /*
+            Any valid token used to be enough, so a customer could permanently
+            delete any order (a hard delete from cstore_orders - orders have no
+            trash). Only the roles whose screens delete orders (Orders,
+            Incomplete, Refunds) may: administrators and store managers.
+        */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to delete orders', array('status' => 403));
+        }
+
 
         $ids     = isset($request['ids']) ? ($request['ids']) : [];
+        $ids     = is_array($ids) ? array_filter(array_map('absint', $ids)) : [];
 
 
         $response = [];
@@ -16444,16 +17402,26 @@ class ComboStoreRest
         // $table_licenses = $prefix . 'cstore_licenses';
         // $table_licenses_meta = $prefix . 'cstore_licenses_meta';
 
+        $deleted = 0;
+
+
         if (!empty($ids)) {
 
             foreach ($ids as $id) {
 
                 //$wpdb->delete($table_subscriptions, array('task_id' => $id), array('%d'));
-                $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                $removed = (int) $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                $deleted += $removed;
+
+                /* The order's lines went with it; they used to be left behind. */
+                if ($removed) {
+                    $wpdb->delete($prefix . 'cstore_order_items', array('order_id' => $id), array('%d'));
+                }
             }
         }
 
         $response['success'] = true;
+        $response['deleted'] = $deleted;
 
 
         // if ($inserted) {
@@ -16598,6 +17566,13 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough to copy any order, a customer's too. */
+        $requester = get_user_by('id', $user_id);
+
+        if (!$requester || !$this->is_ticket_staff($requester)) {
+            return new WP_Error('forbidden', 'You are not allowed to duplicate orders', array('status' => 403));
+        }
+
 
         $order_id     = isset($request['id']) ? ($request['id']) : [];
 
@@ -16656,8 +17631,16 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough, a customer's too. Only the roles the
+           Expenses menu is open to may delete expenses. */
+        $requester = get_user_by('id', $user_id);
 
-        $ids     = isset($request['ids']) ? ($request['ids']) : [];
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to delete expenses', array('status' => 403));
+        }
+
+
+        $ids     = isset($request['ids']) && is_array($request['ids']) ? array_filter(array_map('absint', $request['ids'])) : [];
 
 
         $response = [];
@@ -16676,16 +17659,22 @@ class ComboStoreRest
         // $table_licenses = $prefix . 'cstore_licenses';
         // $table_licenses_meta = $prefix . 'cstore_licenses_meta';
 
+        $deleted = 0;
+
         if (!empty($ids)) {
-
             foreach ($ids as $id) {
+                $removed = (int) $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                $deleted += $removed;
 
-                //$wpdb->delete($table_subscriptions, array('task_id' => $id), array('%d'));
-                $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                /* Its lines go with it; they used to be left behind. */
+                if ($removed) {
+                    $wpdb->delete($prefix . 'cstore_expenses_items', array('expense_id' => $id), array('%d'));
+                }
             }
         }
 
         $response['success'] = true;
+        $response['deleted'] = $deleted;
 
 
         // if ($inserted) {
@@ -16888,8 +17877,16 @@ class ComboStoreRest
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
         }
 
+        /* Any valid token used to be enough, a customer's too. Only the roles the
+           Purchases menu is open to may delete purchases. */
+        $requester = get_user_by('id', $user_id);
 
-        $ids     = isset($request['ids']) ? ($request['ids']) : [];
+        if (!$requester || !array_intersect(['administrator', 'store_manager'], (array) $requester->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to delete purchases', array('status' => 403));
+        }
+
+
+        $ids     = isset($request['ids']) && is_array($request['ids']) ? array_filter(array_map('absint', $request['ids'])) : [];
 
 
         $response = [];
@@ -16908,16 +17905,22 @@ class ComboStoreRest
         // $table_licenses = $prefix . 'cstore_licenses';
         // $table_licenses_meta = $prefix . 'cstore_licenses_meta';
 
+        $deleted = 0;
+
         if (!empty($ids)) {
-
             foreach ($ids as $id) {
+                $removed = (int) $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                $deleted += $removed;
 
-                //$wpdb->delete($table_subscriptions, array('task_id' => $id), array('%d'));
-                $wpdb->delete($table_orders, array('id' => $id), array('%d'));
+                /* Its lines go with it; they used to be left behind. */
+                if ($removed) {
+                    $wpdb->delete($prefix . 'cstore_purchases_items', array('purchase_id' => $id), array('%d'));
+                }
             }
         }
 
         $response['success'] = true;
+        $response['deleted'] = $deleted;
 
 
         // if ($inserted) {
@@ -17333,52 +18336,29 @@ class ComboStoreRest
      */
     public function get_ticket($request)
     {
-        $token = $request->get_header('Authorization');
-        $user_id = null;
-        $isAdmin = false;
+        $user = $this->get_ticket_user($request);
 
-
-        if (!empty($token)) {
-            // return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
-
-
-            // Remove "Bearer " prefix if present
-            $token = str_replace('Bearer ', '', $token);
-
-            // Decode the token
-            try {
-                $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-            } catch (Exception $e) {
-                return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-            }
-
-
-            $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-            if (!$user_id) {
-                return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-            }
-
-
-
-            $user = get_user_by('id', $user_id);
-
-            if (!$user) {
-                return new WP_Error('user_not_found', 'User not found', array('status' => 404));
-            }
-
-            $userRoles = isset($user->roles) ? $user->roles : [];
-            $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        if (is_wp_error($user)) {
+            return $user;
         }
 
+        $user_id = $user->ID;
+        $isAdmin = $this->is_ticket_staff($user);
+
+        $post_id = isset($request['id']) ? absint($request['id']) : 0;
+        $postData = $post_id ? get_post($post_id) : null;
+
+        /* Only tickets: this endpoint must not be a way to read any other post. */
+        if (!$postData || $postData->post_type !== 'ticket') {
+            return new WP_Error('ticket_not_found', 'Ticket not found', array('status' => 404));
+        }
+
+        /* Staff read every ticket; a customer only their own. */
+        if (!$isAdmin && (int) $postData->post_author !== (int) $user_id) {
+            return new WP_Error('forbidden', 'You are not allowed to view this ticket', array('status' => 403));
+        }
 
         $response = [];
-        $post_id     = isset($request['id']) ? absint($request['id']) : 0;
-
-        if (!$post_id) {
-
-            die(wp_json_encode($response));
-        }
 
         $prams = [];
         $prams['object_id'] = $post_id;
@@ -17462,6 +18442,8 @@ class ComboStoreRest
             "post_thumbnail" => ['id' => $post_thumbnail_id, 'src' => $post_thumbnail_url],
             "post_thumbnail_url" => $post_thumbnail_url,
             "featured" => $featured,
+            "priority" => get_post_meta($post_id, 'priority', true),
+            "markedAs" => get_post_meta($post_id, 'markedAs', true),
             "author" => $author,
 
             "categories" => $categoriesData,
@@ -17483,6 +18465,127 @@ class ComboStoreRest
         die(wp_json_encode($response));
     }
 
+    /**
+     * The user behind this request's token.
+     *
+     * @param WP_REST_Request $request Post data.
+     * @return WP_User|WP_Error
+     */
+    private function get_ticket_user($request)
+    {
+        $token = $request->get_header('Authorization');
+
+        if (!$token) {
+            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        }
+
+        $token = str_replace('Bearer ', '', $token);
+
+        try {
+            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+
+        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
+        $user = $user_id ? get_user_by('id', $user_id) : false;
+
+        if (!$user) {
+            return new WP_Error('invalid_token', 'User not found for this token', array('status' => 401));
+        }
+
+        return $user;
+    }
+
+    /**
+     * Whether this user is staff who may manage tickets.
+     *
+     * @param WP_User $user The user.
+     * @return bool
+     */
+    private function is_ticket_staff($user)
+    {
+        $staff_roles = ['administrator', 'support_agent', 'shop_manager', 'store_manager'];
+
+        return (bool) array_intersect($staff_roles, (array) $user->roles);
+    }
+
+    /**
+     * The logged-in user, if they are staff who may manage tickets.
+     *
+     * @param WP_REST_Request $request Post data.
+     * @return WP_User|WP_Error
+     */
+    private function get_ticket_staff_user($request)
+    {
+        $user = $this->get_ticket_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        if (!$this->is_ticket_staff($user)) {
+            return new WP_Error('forbidden', 'You are not allowed to manage tickets', array('status' => 403));
+        }
+
+        return $user;
+    }
+
+    /**
+     * Update a ticket's status and priority.
+     *
+     * Staff only, and only the two fields below: the values are fixed lists,
+     * and an id that is not a ticket is refused rather than given ticket meta.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_ticket($request)
+    {
+        $user = $this->get_ticket_staff_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        $post_id = isset($request['id']) ? absint($request['id']) : 0;
+        $post = $post_id ? get_post($post_id) : null;
+
+        if (!$post || $post->post_type !== 'ticket') {
+            return new WP_Error('ticket_not_found', 'Ticket not found', array('status' => 404));
+        }
+
+        $markedAs = $request->get_param('markedAs');
+        $priority = $request->get_param('priority');
+
+        if ($markedAs === null && $priority === null) {
+            return new WP_Error('nothing_to_update', 'Nothing to update', array('status' => 400));
+        }
+
+        if ($markedAs !== null && !in_array($markedAs, ['open', 'processing', 'closed'], true)) {
+            return new WP_Error('invalid_status', 'Invalid ticket status', array('status' => 400));
+        }
+
+        if ($priority !== null && !in_array((string) $priority, ['1', '10', '90'], true)) {
+            return new WP_Error('invalid_priority', 'Invalid ticket priority', array('status' => 400));
+        }
+
+        if ($markedAs !== null) {
+            update_post_meta($post_id, 'markedAs', $markedAs);
+        }
+
+        if ($priority !== null) {
+            update_post_meta($post_id, 'priority', (string) $priority);
+        }
+
+        $response = [
+            'success' => true,
+            'markedAs' => get_post_meta($post_id, 'markedAs', true),
+            'priority' => get_post_meta($post_id, 'priority', true),
+        ];
+
+        die(wp_json_encode($response));
+    }
+
 
     /**
      * Return Posts
@@ -17492,43 +18595,16 @@ class ComboStoreRest
      */
     public function get_tickets($request)
     {
-        $token = $request->get_header('Authorization');
+        $user = $this->get_ticket_user($request);
 
-
-        if (!$token) {
-            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        if (is_wp_error($user)) {
+            return $user;
         }
 
-        // Remove "Bearer " prefix if present
-        $token = str_replace('Bearer ', '', $token);
+        /* Staff list every ticket; the query below limits anyone else to their own. */
+        $user_id = $user->ID;
+        $isAdmin = $this->is_ticket_staff($user);
 
-        // Decode the token
-        try {
-            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        } catch (Exception $e) {
-            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        }
-
-
-        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-        if (!$user_id) {
-            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        }
-
-
-
-        $user = get_user_by('id', $user_id);
-
-        if (!$user) {
-            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
-        }
-
-        $userRoles = isset($user->roles) ? $user->roles : [];
-        $isAdmin = in_array('administrator', $userRoles) ? true : false;
-
-        $user_id = 1;
-        $isAdmin = true;
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
 
@@ -17705,54 +18781,29 @@ class ComboStoreRest
      */
     public function delete_tickets($request)
     {
-        $token = $request->get_header('Authorization');
+        $user = $this->get_ticket_staff_user($request);
 
-
-        if (!$token) {
-            return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
+        if (is_wp_error($user)) {
+            return $user;
         }
 
-        // Remove "Bearer " prefix if present
-        $token = str_replace('Bearer ', '', $token);
+        $ids = isset($request['ids']) && is_array($request['ids']) ? $request['ids'] : [];
 
-        // Decode the token
-        try {
-            $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
-        } catch (Exception $e) {
-            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
-        }
+        $deleted = [];
 
+        /* Only tickets: this endpoint must not be a way to delete any other post. */
+        foreach ($ids as $id) {
+            $post_id = absint($id);
+            $post = $post_id ? get_post($post_id) : null;
 
-        //Get user by ID
-        $user = get_user_by('id', $decoded_token->sub);
-
-
-
-        $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-        if (!$user_id) {
-            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        }
-
-
-        $ids     = isset($request['ids']) ? ($request['ids']) : [];
-
-
-        $response = [];
-
-
-
-        if (!empty($ids)) {
-
-            foreach ($ids as $id) {
-                wp_delete_post($id, false);
+            if ($post && $post->post_type === 'ticket' && wp_delete_post($post_id, false)) {
+                $deleted[] = $post_id;
             }
         }
 
+        $response = [];
         $response['success'] = true;
-
-
-
+        $response['deleted'] = $deleted;
 
         die(wp_json_encode($response));
     }
@@ -17964,6 +19015,13 @@ class ComboStoreRest
 
             update_post_meta($id, 'css', $css);
 
+            /* The page's settings from the builder (header/footer toggles, SEO).
+               They were sent but never stored, so they were lost on reload. Only
+               known keys are kept, each sanitized for what it is. */
+            if (isset($body_arr['meta']) && is_array($body_arr['meta'])) {
+                update_post_meta($id, 'page_meta', $this->sanitize_page_meta($body_arr['meta']));
+            }
+
             $response['success'] = true;
         } else {
             $response['success'] = false;
@@ -17975,6 +19033,34 @@ class ComboStoreRest
         die(wp_json_encode($response));
     }
 
+
+
+    /**
+     * The builder's page settings, keeping only known keys: the header and
+     * footer toggles, and `seo` - title, description, image (URL), canonical
+     * (URL) and noindex - which the storefront's page metadata reads.
+     *
+     * @param array $meta Settings as the builder sent them.
+     * @return array
+     */
+    private function sanitize_page_meta($meta)
+    {
+        $clean = [
+            'disableHeader' => !empty($meta['disableHeader']),
+            'disableFooter' => !empty($meta['disableFooter']),
+        ];
+
+        $seo = isset($meta['seo']) && is_array($meta['seo']) ? $meta['seo'] : [];
+        $clean['seo'] = [
+            'title'       => isset($seo['title']) ? sanitize_text_field($seo['title']) : '',
+            'description' => isset($seo['description']) ? sanitize_textarea_field($seo['description']) : '',
+            'image'       => isset($seo['image']) ? esc_url_raw($seo['image']) : '',
+            'canonical'   => isset($seo['canonical']) ? esc_url_raw($seo['canonical']) : '',
+            'noindex'     => !empty($seo['noindex']),
+        ];
+
+        return $clean;
+    }
 
 
     /**
@@ -18015,20 +19101,39 @@ class ComboStoreRest
         }
 
 
+        /*
+            Any valid token used to be enough, so a customer could delete any
+            post, product or coupon on the site. Only the roles whose dashboard
+            screens call this (Products, Coupons, Reviews, Stocks, Posts,
+            Comments) may use it.
+        */
+        $user = get_user_by('id', $user_id);
+        $userRoles = ($user && isset($user->roles)) ? (array) $user->roles : [];
+
+        if (!array_intersect(['administrator', 'store_manager'], $userRoles)) {
+            return new WP_Error('forbidden', 'You are not allowed to delete these items', array('status' => 403));
+        }
+
+
         $ids     = isset($request['ids']) ? ($request['ids']) : [];
+        $ids     = is_array($ids) ? array_filter(array_map('absint', $ids)) : [];
 
 
         $response = [];
+        $deleted = 0;
 
 
 
         if (!empty($ids)) {
             foreach ($ids as $id) {
-                wp_delete_post($id, false);
+                if (wp_delete_post($id, false)) {
+                    $deleted++;
+                }
             }
         }
 
         $response['success'] = true;
+        $response['deleted'] = $deleted;
 
 
         // if ($inserted) {
@@ -18151,10 +19256,30 @@ class ComboStoreRest
         }
 
 
+        /*
+            Any valid token used to be enough, so a customer could permanently
+            delete any account that was not an administrator. Now:
+             - an administrator may delete anyone but administrators;
+             - a store manager may delete customers (and plain subscribers) only;
+             - nobody deletes their own account here;
+             - everyone else is refused.
+        */
+        $requester = get_user_by('id', $user_id);
+        $requester_roles = $requester ? (array) $requester->roles : [];
+        $is_admin = in_array('administrator', $requester_roles, true);
+        $is_store_manager = in_array('store_manager', $requester_roles, true);
+
+        if (!$is_admin && !$is_store_manager) {
+            return new WP_Error('forbidden', 'You are not allowed to delete users', array('status' => 403));
+        }
+
         $ids     = isset($request['ids']) ? ($request['ids']) : [];
+        $ids     = is_array($ids) ? array_filter(array_map('absint', $ids)) : [];
 
 
         $response = [];
+        $deleted = 0;
+        $skipped = 0;
 
 
 
@@ -18164,20 +19289,37 @@ class ComboStoreRest
 
             foreach ($ids as $id) {
 
-                $user = new WP_User($id);
-                $roles = $user->roles;
+                $user = get_user_by('id', $id);
 
+                if (!$user || (int) $id === (int) $user_id) {
+                    $skipped++;
+                    continue;
+                }
 
+                $roles = (array) $user->roles;
 
-                if (in_array('administrator', (array) $roles)) {
+                if (in_array('administrator', $roles, true)) {
+                    $skipped++;
                     continue; // Skip deletion for administrators
+                }
+
+                /* A store manager's reach: accounts with no role but customer or subscriber. */
+                if (!$is_admin && array_diff($roles, ['customer', 'subscriber'])) {
+                    $skipped++;
+                    continue;
+                }
+
+                if (wp_delete_user($id)) {
+                    $deleted++;
                 } else {
-                    wp_delete_user($id);
+                    $skipped++;
                 }
             }
         }
 
         $response['success'] = true;
+        $response['deleted'] = $deleted;
+        $response['skipped'] = $skipped;
 
 
         // if ($inserted) {
@@ -18237,7 +19379,25 @@ class ComboStoreRest
         }
 
 
-        $post_id     = isset($request['id']) ? ($request['id']) : [];
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+        }
+
+        /* Any valid token used to be enough - a customer's too. Only the roles
+           the Products menu is open to may. */
+        if (!array_intersect(['administrator', 'store_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to duplicate products', array('status' => 403));
+        }
+
+        $post_id     = isset($request['id']) ? absint($request['id']) : 0;
+
+        /* It copied any post of any type - orders' notes, pages, other people's
+           private posts. This screen only duplicates products. */
+        if (!$post_id || get_post_type($post_id) !== 'cmb_product') {
+            die(wp_json_encode(array('success' => false, 'message' => 'Product not found.')));
+        }
 
 
         $response = [];
@@ -18258,7 +19418,8 @@ class ComboStoreRest
                     'post_author'    => $user_id,
                     'post_content'   => $post->post_content,
                     'post_excerpt'   => $post->post_excerpt,
-                    'post_name'      => $post->post_name,
+                    /* Left empty so WordPress gives the copy its own slug. */
+                    'post_name'      => '',
                     'post_parent'    => $post->post_parent,
                     'post_password'  => $post->post_password,
                     'post_status'    => 'draft',
@@ -18272,6 +19433,10 @@ class ComboStoreRest
                 * insert the post by wp_insert_post() function
                 */
                 $new_post_id = wp_insert_post($args);
+
+                if (!$new_post_id || is_wp_error($new_post_id)) {
+                    die(wp_json_encode(array('success' => false, 'message' => 'The copy could not be created.')));
+                }
 
                 /*
                 * get all current post terms ad set them to the new post draft
@@ -18296,6 +19461,44 @@ class ComboStoreRest
         }
 
 
+
+        /*
+           Prices, stock, SKU and variations live in cstore_products and
+           cstore_products_variations, not post meta, so the copy used to have
+           none of them. Copy them - but not the stock (the units are not
+           doubled), the SKU (it has to stay unique) or the ratings.
+        */
+        if (!empty($new_post_id)) {
+            global $wpdb;
+            $table_products   = $wpdb->prefix . 'cstore_products';
+            $table_variations = $wpdb->prefix . 'cstore_products_variations';
+
+            $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_products WHERE product_id = %d LIMIT 1", $post_id), ARRAY_A);
+
+            if ($row) {
+                unset($row['id'], $row['created_at'], $row['updated_at']);
+                $row['product_id']  = (int) $new_post_id;
+                $row['sku']         = '';
+                $row['stock_count'] = 0;
+                $row['stock_status'] = $row['stock_status'] === 'instock' ? 'outofstock' : $row['stock_status'];
+                $row['total_rate']  = 0;
+                $row['avg_rating']  = 0;
+                $wpdb->insert($table_products, $row);
+            }
+
+            $variations = $wpdb->get_results($wpdb->prepare("SELECT * FROM $table_variations WHERE product_id = %d", $post_id), ARRAY_A);
+
+            foreach ((array) $variations as $variation) {
+                unset($variation['id']);
+                $variation['product_id']  = (int) $new_post_id;
+                $variation['sku']         = '';
+                $variation['stock_count'] = 0;
+                $variation['stock_status'] = $variation['stock_status'] === 'instock' ? 'outofstock' : $variation['stock_status'];
+                $wpdb->insert($table_variations, $variation);
+            }
+
+            $response['id'] = (int) $new_post_id;
+        }
 
         $response['success'] = true;
 
