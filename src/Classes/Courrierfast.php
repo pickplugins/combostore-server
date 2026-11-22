@@ -13,6 +13,8 @@ class Courrierfast
     private $store_id;
     private $base_url = 'https://app.courrierfast.com/api/method';
 
+    private static $hooks_added = false;
+
     public function __construct()
     {
         $settings = get_option('combo_store_settings', []);
@@ -24,15 +26,33 @@ class Courrierfast
         $this->secret_key = $courrierfast['secret_key'] ?? '';
         $this->store_id = $courrierfast['store_id'] ?? '';
 
-        add_filter(
-            'cstore_send_to_courier_courrierfast',
-            [$this, 'cstore_send_to_courier_courrierfast']
-        );
+        // Once per request, however many times the class is instantiated.
+        if (!self::$hooks_added) {
+            self::$hooks_added = true;
+            add_filter(
+                'cstore_send_to_courier_courrierfast',
+                [$this, 'cstore_send_to_courier_courrierfast']
+            );
+            add_filter(
+                'couriers_webhook_courrierfast',
+                [$this, 'couriers_webhook_courrierfast']
+            );
+        }
+    }
 
-        add_filter(
-            'couriers_webhook_courrierfast',
-            [$this, 'couriers_webhook_courrierfast']
-        );
+    /**
+     * CourrierFast webhook (filter couriers_webhook_courrierfast).
+     * UNVERIFIED payload: field names are tolerant guesses.
+     * Webhook URL: .../api/couriers-webhook?courier=courrierfast&token=<token>
+     */
+    public function couriers_webhook_courrierfast($data)
+    {
+        return \cstore_courier_webhook_handle('courrierfast', $data, [
+            'order_keys'       => ['merchant_order_id', 'invoice', 'order_id', 'data.merchant_order_id'],
+            'consignment_keys' => ['delivery_id', 'consignment_id', 'tracking_code', 'name', 'data.name'],
+            'status_keys'      => ['status', 'delivery_status', 'event', 'data.status'],
+            'message_keys'     => ['message', 'remarks', 'note', 'data.message'],
+        ]);
     }
 
     /**
@@ -262,185 +282,105 @@ class Courrierfast
     }
 
     /**
-     * Send a ComboStore order to CourrierFast.
+     * Send a ComboStore order to CourrierFast (filter cstore_send_to_courier_courrierfast).
      *
-     * District, thana, and area must be valid CourrierFast
-     * values/codes. Map your checkout fields to these values
-     * before submitting the parcel.
+     * $data (courierData from the dashboard): order_id, item_type,
+     * deliveryServiceType (regular), deliveryInstructions, and optional
+     * district / thana / area (CourrierFast location values).
      */
     public function cstore_send_to_courier_courrierfast($data)
     {
-        $result = [
-            'status' => 'error',
-            'message' => 'Unable to send order to CourrierFast.',
-        ];
-
-        $order_id = $data['order_id'] ?? '';
+        $response = [];
+        $order_id = isset($data['order_id']) ? sanitize_text_field($data['order_id']) : '';
+        $item_type = isset($data['item_type']) ? $data['item_type'] : 2;
+        $deliveryServiceType = isset($data['deliveryServiceType']) ? $data['deliveryServiceType'] : 'regular';
+        $deliveryInstructions = isset($data['deliveryInstructions']) ? $data['deliveryInstructions'] : '';
 
         if (!$order_id) {
-            $result['message'] = 'Order ID is required.';
-            return $result;
+            return $response;
         }
 
-        if (empty($this->store_id)) {
-            $result['message'] = 'CourrierFast store ID is missing.';
-            return $result;
-        }
+        $ComboStoreProduct = new ComboStoreProduct();
+        $ComboStoreOrders = new ComboStoreOrders();
 
-        $orders = new ComboStoreOrders();
-        $orderData = $orders->get_order($order_id);
+        $orderData = $ComboStoreOrders->get_order($order_id);
 
-        if (empty($orderData) || !is_array($orderData)) {
-            $result['message'] = 'ComboStore order not found.';
-            return $result;
-        }
+        $order_items = isset($orderData['order_items']) ? $orderData['order_items'] : [];
 
-        /*
-         * Resolve these location fields to actual CourrierFast
-         * district/thana/area values before calling the API.
-         *
-         * Checkout field names may differ in your installation.
-         */
-        $location = [
-            'district' => $data['district']
-                ?? $orderData['district']
-                ?? '',
-            'thana' => $data['thana']
-                ?? $orderData['thana']
-                ?? '',
-            'area' => $data['area']
-                ?? $orderData['area']
-                ?? '',
-        ];
-
-        if (
-            empty($location['district'])
-            || empty($location['thana'])
-        ) {
-            $result['message'] =
-                'District and thana are required. Map the order address '
-                . 'to CourrierFast location values first.';
-
-            return $result;
-        }
-
-        $order_items = $orderData['order_items'] ?? [];
-        $product_details = [];
+        $item_description = '';
+        $total_weight = 0;
         $total_quantity = 0;
 
-        foreach ($order_items as $item) {
-            $product_id = $item->product_id ?? 0;
-            $quantity = (int) ($item->quantity ?? 1);
-            $product_name = $product_id
-                ? get_the_title($product_id)
-                : '';
+        foreach ($order_items as $order_item) {
+            $product_id = isset($order_item->product_id) ? $order_item->product_id : '';
+            $quantity = isset($order_item->quantity) ? (int) $order_item->quantity : 0;
+            $get_product = $ComboStoreProduct->get_product(['product_id' => $product_id]);
 
-            if ($product_name !== '') {
-                $product_details[] = $product_name . ' x ' . $quantity;
-            }
-
+            $total_weight += ((float) ($get_product->weight ?? 0)) * $quantity;
             $total_quantity += $quantity;
+
+            $product_name = trim(preg_replace('/\s+/', ' ', html_entity_decode(get_the_title($product_id))));
+            $item_description .= $product_name . ' X ' . $quantity . ',';
         }
 
-        $address = $orderData['billing_address'] ?? '';
-
-        $parcel = [
-            'store' => $this->store_id,
-            'merchantOrderId' => (string) $order_id,
-            'productType' => 'Regular Item',
-            'customerName' => $orderData['billing_name'] ?? '',
-            'mobileNumber' => $orderData['billing_phone'] ?? '',
-            'district' => $location['district'],
-            'thana' => $location['thana'],
-            'area' => $location['area'],
-            'detailedAddress' => $address,
-            'codAmount' => (float) (
-                $orderData['total_amount'] ?? 0
-            ),
-            'weight' => (string) (
-                $data['weight'] ?? '0.5'
-            ),
-            'productDetails' => implode(', ', $product_details),
-            'deliveryServiceType' => 'regular',
-            'deliveryInstructions' => $orderData['note'] ?? '',
+        $order = [
+            "store" => $this->store_id,
+            "merchantOrderId" => $order_id,
+            "customerName" => $orderData['billing_name'],
+            "mobileNumber" => $orderData['billing_phone'],
+            "recipient_email" => $orderData['billing_email'],
+            "detailedAddress" => $orderData['billing_address'],
+            "codAmount" => $orderData['total_amount'],
+            "weight" => "$total_weight",
+            "item_quantity" => $total_quantity,
+            "productType" => $item_type,
+            // Defaults kept from the old function until the order screen sends a location.
+            "district" => !empty($data['district']) ? sanitize_text_field($data['district']) : 'rangpur',
+            "thana" => !empty($data['thana']) ? sanitize_text_field($data['thana']) : 'rangpur sadar',
+            "area" => !empty($data['area']) ? sanitize_text_field($data['area']) : '',
+            "deliveryInstructions" => $deliveryInstructions,
+            "productDetails" => $item_description,
+            "deliveryServiceType" => $deliveryServiceType,
         ];
 
-        /*
-         * Allow integrations to customize parcel mapping without
-         * modifying this class.
-         */
-        $parcel = apply_filters(
-            'cstore_courrierfast_parcel_data',
-            $parcel,
-            $orderData,
-            $data
-        );
+        $order = apply_filters('cstore_courrierfast_parcel_data', $order, $orderData, $data);
 
-        $api_response = $this->createParcel($parcel);
+        $api_response = $this->createParcel($order);
 
         if (empty($api_response['status'])) {
-            return [
-                'status' => 'error',
-                'message' => 'CourrierFast parcel creation failed.',
-                'errors' => $api_response,
-            ];
+            $response['success'] = false;
+            $response['message'] = !empty($api_response['error']) ? $api_response['error'] : 'Order sent to courier failed';
+            $response['errors'] = $api_response['missing_fields'] ?? [];
+            return $response;
         }
 
-        /*
-         * CourrierFast's documented response fields were not
-         * provided. Preserve the entire response instead of
-         * assuming specific tracking or consignment keys.
-         */
-        $response_data = $api_response['response'] ?? [];
+        // CourrierFast is a Frappe API: the result is usually wrapped in "message".
+        $body = $api_response['response'] ?? [];
+        $result = isset($body['message']) && is_array($body['message']) ? $body['message'] : (is_array($body) ? $body : []);
 
-        $delivery_id = $response_data['consignment_id']
-            ?? $response_data['parcel_id']
-            ?? $response_data['name']
-            ?? '';
+        $consignment_id = $result['consignment_id'] ?? ($result['parcel_id'] ?? ($result['name'] ?? ''));
+        $tracking_code = $result['tracking_code'] ?? ($result['tracking_number'] ?? ($result['tracking_id'] ?? ''));
+        $tracking_link = $result['tracking_link'] ?? '';
 
-        $tracking_code = $response_data['tracking_code']
-            ?? $response_data['tracking_number']
-            ?? '';
+        $response['status'] = 'success';
+        $response['message'] = 'Order sent to courier successfully';
+        $response['consignment_id'] = $consignment_id;
+        $response['tracking_code'] = $tracking_code;
+        $response['tracking_link'] = $tracking_link;
 
-        $tracking_link = $response_data['tracking_link'] ?? '';
-
-        $deliveries = new ComboStoreDeliveries();
-
-        $newDelivery = [
-            'customer_id' => $orderData['userid'] ?? '',
+        $ComboStoreDeliveries = new ComboStoreDeliveries();
+        $ComboStoreDeliveries->create_delivery([
+            'customer_id' => $orderData['userid'],
             'order_id' => $order_id,
             'rider_id' => '',
             'status' => 'started',
             'courier' => 'courrierfast',
-            'consignment_id' => $delivery_id,
+            'consignment_id' => $consignment_id,
             'tracking_code' => $tracking_code,
             'tracking_link' => $tracking_link,
-            'courier_data' => $response_data,
-        ];
+            'courier_data' => $result,
+        ]);
 
-        $deliveries->create_delivery($newDelivery);
-
-        return [
-            'status' => 'success',
-            'message' => 'Order sent to CourrierFast successfully.',
-            'consignment_id' => $delivery_id,
-            'tracking_code' => $tracking_code,
-            'tracking_link' => $tracking_link,
-            'courier_response' => $response_data,
-        ];
-    }
-
-    /**
-     * Webhook integration placeholder.
-     *
-     * Implement status mapping after obtaining the official
-     * CourrierFast webhook payload and authentication rules.
-     */
-    public function couriers_webhook_courrierfast($data)
-    {
-        return [
-            'status' => 'error',
-            'message' => 'CourrierFast webhook handling is not configured yet.',
-        ];
+        return $response;
     }
 }

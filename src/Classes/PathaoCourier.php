@@ -18,6 +18,9 @@ class PathaoCourier
     private $base_url;
     private $sandbox;
     private $access_token;
+    private $store_id;
+
+    private static $hooks_added = false;
 
     public function __construct()
     {
@@ -37,6 +40,134 @@ class PathaoCourier
 
         // ⚠️ আগের কোডে error_log(wp_json_encode($pathao)) ছিল — এতে client_secret ও
         // পাসওয়ার্ড debug.log-এ plain text-এ লেখা হচ্ছিল। সরিয়ে দেওয়া হয়েছে।
+
+        // settings.couriers is where the dashboard saves; settings.courier is the old key.
+        $legacy         = $settings['courier']['pathao'] ?? [];
+        $this->store_id = trim((string) ($pathao['store_id'] ?? ($legacy['store_id'] ?? '')));
+
+        // Once per request, however many times the class is instantiated.
+        if (!self::$hooks_added) {
+            self::$hooks_added = true;
+            add_filter('cstore_send_to_courier_pathao', array($this, 'cstore_send_to_courier_pathao'));
+            add_filter('couriers_webhook_pathao', array($this, 'couriers_webhook_pathao'));
+        }
+    }
+
+    /**
+     * Pathao webhook (filter couriers_webhook_pathao). Signature header
+     * X-PATHAO-Signature = the webhook secret set in the Pathao merchant panel
+     * (same value as webhook_auth_token here). Pathao wants 202 and the
+     * integration-secret header on every reply, or it rejects the URL.
+     */
+    public function couriers_webhook_pathao($data)
+    {
+        return \cstore_courier_webhook_handle('pathao', $data, [
+            'signature_headers' => ['x_pathao_signature'],
+            'order_keys'        => ['merchant_order_id'],
+            'consignment_keys'  => ['consignment_id'],
+            'status_keys'       => ['event', 'order_status'],
+            'message_keys'      => ['reason', 'message'],
+            'ignore_statuses'   => ['webhook_integration'],
+            'http_status'       => 202,
+            'http_headers'      => [
+                'X-Pathao-Merchant-Webhook-Integration-Secret' => 'f3992ecc-59da-4cbe-a049-a13da2018d51',
+            ],
+        ]);
+    }
+
+    /**
+     * Send a ComboStore order to Pathao (filter cstore_send_to_courier_pathao).
+     *
+     * $data (courierData from the dashboard): order_id, item_type, delivery_type.
+     */
+    public function cstore_send_to_courier_pathao($data)
+    {
+        $response = [];
+        $order_id = isset($data['order_id']) ? $data['order_id'] : '';
+        $item_type = isset($data['item_type']) ? $data['item_type'] : 2;
+        $delivery_type = isset($data['delivery_type']) ? $data['delivery_type'] : '48';
+
+        if (!$order_id) {
+            return $response;
+        }
+
+        $ComboStoreProduct = new ComboStoreProduct();
+        $ComboStoreOrders = new ComboStoreOrders();
+
+        $orderData = $ComboStoreOrders->get_order($order_id);
+
+        $order_items = isset($orderData['order_items']) ? $orderData['order_items'] : [];
+
+        $item_description = '';
+        $total_weight = 0;
+        $total_quantity = 0;
+
+        foreach ($order_items as $order_item) {
+            $product_id = isset($order_item->product_id) ? $order_item->product_id : '';
+            $quantity = isset($order_item->quantity) ? (int) $order_item->quantity : 0;
+            $get_product = $ComboStoreProduct->get_product(['product_id' => $product_id]);
+
+            $total_weight += ((float) ($get_product->weight ?? 0)) * $quantity;
+            $total_quantity += $quantity;
+
+            $product_name = trim(preg_replace('/\s+/', ' ', html_entity_decode(get_the_title($product_id))));
+            $item_description .= $product_name . ' X ' . $quantity . ',';
+        }
+
+        $order = [
+            "store_id" => $this->store_id,
+            "merchant_order_id" => $order_id,
+            "recipient_name" => $orderData['billing_name'],
+            "recipient_phone" => $orderData['billing_phone'],
+            "recipient_email" => $orderData['billing_email'],
+            "recipient_address" => $orderData['billing_address'],
+            "amount_to_collect" => $orderData['total_amount'],
+            "item_weight" => $total_weight,
+            "item_quantity" => $total_quantity,
+            "item_type" => $item_type,
+            "note" => '',
+            "item_description" => $item_description,
+            "delivery_type" => $delivery_type,
+        ];
+
+        try {
+            $pathao_response = $this->createOrder($order);
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => $e->getMessage(), 'errors' => []];
+        }
+
+        $type = isset($pathao_response['type']) ? $pathao_response['type'] : false;
+
+        if ($type != 'success') {
+            $response['success'] = false;
+            $response['message'] = 'Order sent to courier failed';
+            $response['errors'] = [];
+            return $response;
+        }
+
+        $result = isset($pathao_response['data']) ? $pathao_response['data'] : [];
+
+        $consignment_id = isset($result['consignment_id']) ? $result['consignment_id'] : '';
+        $tracking_code = isset($result['tracking_code']) ? $result['tracking_code'] : '';
+
+        $response['status'] = 'success';
+        $response['message'] = 'Order sent to courier successfully';
+        $response['consignment_id'] = $consignment_id;
+        $response['tracking_code'] = $tracking_code;
+
+        $ComboStoreDeliveries = new ComboStoreDeliveries();
+        $ComboStoreDeliveries->create_delivery([
+            'customer_id' => $orderData['userid'],
+            'order_id' => $order_id,
+            'rider_id' => '',
+            'status' => 'started',
+            'courier' => 'pathao',
+            'consignment_id' => $consignment_id,
+            'tracking_code' => $tracking_code,
+            'courier_data' => $result,
+        ]);
+
+        return $response;
     }
 
     /**

@@ -28,6 +28,8 @@ use ComboStore\Classes\ComboStoreSubscriptionsToCall;
 use ComboStore\Classes\ComboStoreProduct;
 use ComboStore\Classes\ComboStoreDeliveries;
 use ComboStore\Classes\ComboStoreSubscriptions;
+use ComboStore\Classes\ComboStoreLicenses;
+use ComboStore\Classes\ComboStoreDownloads;
 use ComboStore\Classes\ComboStoreExpenses;
 use ComboStore\Classes\ComboStoreTemplateParts;
 use ComboStore\Classes\RedxCourier;
@@ -527,6 +529,15 @@ class ComboStoreRest
         );
         register_rest_route(
             'combo-store/v2',
+            '/get_price_range',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_price_range'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
             '/request_for_stock',
             array(
                 'methods'  => 'POST',
@@ -707,6 +718,15 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'moderate_comments'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_review_summary',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_review_summary'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1006,6 +1026,43 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_medias'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/media_preview',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'media_preview'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/run_subscription_renewals',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'run_subscription_renewals'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        register_rest_route(
+            'combo-store/v2',
+            '/get_order_downloads',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_order_downloads'),
+                'permission_callback' => '__return_true',
+            )
+        );
+        /* Opened as a plain link, so it is authorised by its signature, not a token. */
+        register_rest_route(
+            'combo-store/v2',
+            '/download_file',
+            array(
+                'methods'  => 'GET',
+                'callback' => array($this, 'download_file'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1510,12 +1567,38 @@ class ComboStoreRest
 
 
 
+        /*
+            The storefront's payment gateways (lib/*-server.js: Stripe, Paddle,
+            EPS, aamarPay, bKash, Nagad) record a verified payment here,
+            server to server with the store's API key. update_order needs a
+            staff login, which a gateway callback or webhook does not have.
+        */
+        register_rest_route(
+            'combo-store/v2',
+            '/record_gateway_payment',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'record_gateway_payment'),
+                'permission_callback' => array($this, 'api_key_permission'),
+            )
+        );
         register_rest_route(
             'combo-store/v2',
             '/get_order_by_hash',
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_order_by_hash'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        /* The storefront's Order Tracking element. Public; see track_order(). */
+        register_rest_route(
+            'combo-store/v2',
+            '/track_order',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'track_order'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -1910,6 +1993,46 @@ class ComboStoreRest
             array(
                 'methods'  => 'POST',
                 'callback' => array($this, 'get_licenses'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/get_license',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'get_license'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/create_license',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'create_license'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/update_license',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'update_license'),
+                'permission_callback' => '__return_true',
+            )
+        );
+
+        register_rest_route(
+            'combo-store/v2',
+            '/delete_licenses',
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'delete_licenses'),
                 'permission_callback' => '__return_true',
             )
         );
@@ -2355,6 +2478,26 @@ class ComboStoreRest
         $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
 
         $files_to_upload = isset($request->get_file_params()['file']) ? $request->get_file_params()['file'] : [];
+
+        /* "Secure upload": into wp-content/uploads/combostore, the restricted
+           folder for paid downloads and licensed files. Staff only - unlike
+           ordinary uploads, which checkout also uses for customers. */
+        $secure = !empty($request['secure']) && filter_var($request['secure'], FILTER_VALIDATE_BOOLEAN);
+
+        if ($secure) {
+            $auth = $this->license_request_user($request);
+            if (is_wp_error($auth)) return $auth;
+            if (!$auth['is_staff']) {
+                return new WP_Error('forbidden', 'Only store staff can make secure uploads', array('status' => 403));
+            }
+
+            $response = upload_secure_media_file($files_to_upload);
+            if (is_wp_error($response)) {
+                return new WP_Error($response->get_error_code(), $response->get_error_message(), array('status' => 400));
+            }
+
+            die(wp_json_encode($response));
+        }
 
 
         $response = upload_media_file($files_to_upload);
@@ -2876,7 +3019,8 @@ class ComboStoreRest
 
         $from = "FROM $table_subscriptions s
                  LEFT JOIN $table_orders o ON o.id = s.order_id
-                 LEFT JOIN {$wpdb->users} u ON u.ID = s.userid";
+                 LEFT JOIN {$wpdb->users} u ON u.ID = s.userid
+                 LEFT JOIN {$wpdb->posts} p ON p.ID = s.product_id";
         $base_where = implode(' AND ', $where);
 
         /* Counts per status for the filter, before the status filter itself. */
@@ -2896,7 +3040,8 @@ class ComboStoreRest
         $total = (int) $wpdb->get_var($values ? $wpdb->prepare($total_sql, $values) : $total_sql);
 
         $list_sql = "SELECT s.*, o.billing_name, o.billing_email, o.billing_phone,
-                            u.display_name AS customer_name, u.user_email AS customer_email
+                            u.display_name AS customer_name, u.user_email AS customer_email,
+                            p.post_title AS product_title
                      $from WHERE $full_where ORDER BY s.id $order LIMIT %d, %d";
         $entries = $wpdb->get_results($wpdb->prepare($list_sql, array_merge($values, [($page - 1) * $per_page, $per_page])));
 
@@ -3448,13 +3593,16 @@ class ComboStoreRest
 
         // $user_id = 1;
         // $isAdmin = true;
+        /* Store managers have the Purchases menu and may create purchases, but were
+           shown only the ones they created, with every filter ignored. */
         $userRoles = isset($user->roles) ? $user->roles : [];
-        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+        $isAdmin = (bool) array_intersect(['administrator', 'store_manager'], (array) $userRoles);
 
 
 
         $body = $request->get_body();
         $body_arr = json_decode($body, true);
+        if (!is_array($body_arr)) $body_arr = [];
 
         $body_arr['isAdmin'] = $isAdmin;
         $body_arr['user_id'] = $user_id;
@@ -4016,19 +4164,96 @@ class ComboStoreRest
 
         //$entries = $wpdb->get_results("SELECT * FROM $table WHERE datetime BETWEEN '$first_date' AND '$last_day' ORDER BY id $order limit $offset, $per_page");
 
-        if ($isAdmin) {
-            $entries = $wpdb->get_results("SELECT * FROM $table ORDER BY id $order limit $offset, $per_page");
-            // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table");
+        /*
+            Who sees what:
+            - staff (administrator, store_manager) see every delivery, optionally
+              filtered by `rider_id` (a user id, or "none" for unassigned). Store
+              managers have the Deliveries menu but used to fall through to the
+              customer branch, so their list was empty;
+            - a rider sees their own; anyone else, the deliveries of their orders.
+            `order` went into the SQL as sent, and per_page 0 divided by zero.
+        */
+        $isStaff  = $isAdmin || in_array('store_manager', $userRoles, true);
+        $order    = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+        $per_page = $per_page > 0 ? min($per_page, 200) : 10;
+        $offset   = ($page - 1) * $per_page;
+
+        $where  = '1=1';
+        $params = [];
+
+        if ($isStaff) {
+            $rider_filter = isset($request['rider_id']) ? (string) $request['rider_id'] : '';
+            if ($rider_filter === 'none') {
+                $where = '(rider_id IS NULL OR rider_id = 0)';
+            } elseif (absint($rider_filter) > 0) {
+                $where    = 'rider_id = %d';
+                $params[] = absint($rider_filter);
+            }
         } elseif ($isRider) {
-            $entries = $wpdb->get_results("SELECT * FROM $table WHERE rider_id='$user_id' ORDER BY id $order limit $offset, $per_page");
-            // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table  ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table WHERE rider_id='$user_id'");
+            $where    = 'rider_id = %d';
+            $params[] = (int) $user_id;
         } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table WHERE customer_id='$user_id' ORDER BY id $order limit $offset, $per_page");
-            // $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table  ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table WHERE customer_id='$user_id'");
+            $where    = 'customer_id = %d';
+            $params[] = (int) $user_id;
         }
+
+        /* from_date / to_date (yyyy-mm-dd, either may be empty) on when the delivery started. */
+        foreach (['from_date' => ['>=', ' 00:00:00'], 'to_date' => ['<=', ' 23:59:59']] as $key => [$op, $time]) {
+            $day = isset($request[$key]) ? substr((string) $request[$key], 0, 10) : '';
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+                $where   .= " AND datetime $op %s";
+                $params[] = $day . $time;
+            }
+        }
+
+        /*
+            Counts per status within the scope above (who, the rider filter and dates),
+            before the status filter, so the page can show how many each option has.
+        */
+        $count_rows = $wpdb->get_results(
+            $params
+                ? $wpdb->prepare("SELECT status, COUNT(*) n FROM $table WHERE $where GROUP BY status", $params)
+                : "SELECT status, COUNT(*) n FROM $table WHERE $where GROUP BY status",
+            ARRAY_A
+        );
+        $status_counts = [];
+        foreach ((array) $count_rows as $row) {
+            $status_counts[$row['status'] !== null && $row['status'] !== '' ? $row['status'] : 'unknown'] = (int) $row['n'];
+        }
+
+        /*
+            status: one status ("in_transit"), or a group - "in_progress",
+            "done", "failed" - with the same meaning as the rider page
+            (ComboStoreRiders), so the two never disagree.
+        */
+        $status_filter = isset($request['status']) ? sanitize_key((string) $request['status']) : '';
+        if ($status_filter !== '') {
+            $done   = ComboStoreRiders::DONE_STATUSES;
+            $failed = ComboStoreRiders::FAILED_STATUSES;
+
+            if ($status_filter === 'done' || $status_filter === 'failed') {
+                $group  = $status_filter === 'done' ? $done : $failed;
+                $where .= ' AND status IN (' . implode(',', array_fill(0, count($group), '%s')) . ')';
+                $params = array_merge($params, $group);
+            } elseif ($status_filter === 'in_progress') {
+                $closed = array_merge($done, $failed);
+                $where .= ' AND (status IS NULL OR status NOT IN (' . implode(',', array_fill(0, count($closed), '%s')) . '))';
+                $params = array_merge($params, $closed);
+            } elseif ($status_filter === 'unknown') {
+                $where .= " AND (status IS NULL OR status = '')";
+            } else {
+                $where   .= ' AND status = %s';
+                $params[] = $status_filter;
+            }
+        }
+
+        $list_sql  = "SELECT * FROM $table WHERE $where ORDER BY id $order LIMIT %d, %d";
+        $count_sql = "SELECT COUNT(`id`) FROM $table WHERE $where";
+
+        $entries = $wpdb->get_results($wpdb->prepare($list_sql, array_merge($params, [$offset, $per_page])));
+        $total   = (int) ($params ? $wpdb->get_var($wpdb->prepare($count_sql, $params)) : $wpdb->get_var($count_sql));
+
+        $response['status_counts'] = $status_counts ?: new \stdClass();
 
 
 
@@ -4133,6 +4358,128 @@ class ComboStoreRest
 
 
     /**
+     * Thumbnail of an image, for store staff - mainly restricted images in
+     * uploads/combostore, whose URL is blocked so an <img> cannot show them.
+     * The dashboard fetches this with its token and shows the result as a blob.
+     *
+     * Body: { id, size? (px, 64-800, default 400) }. Streams the image scaled
+     * to fit size × size, or the original when no image editor is available
+     * and the file is under 5 MB.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function media_preview($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+        if (!$auth['is_staff']) {
+            return new WP_Error('forbidden', 'Only store staff can preview media', array('status' => 403));
+        }
+
+        $id = isset($request['id']) ? absint($request['id']) : 0;
+        $size = isset($request['size']) ? min(800, max(64, absint($request['size']))) : 400;
+
+        $post = $id ? get_post($id) : null;
+        $file = $post && $post->post_type === 'attachment' ? get_attached_file($id) : '';
+
+        if (!$file || !file_exists($file)) {
+            return new WP_Error('not_found', 'Media not found', array('status' => 404));
+        }
+
+        $mime = get_post_mime_type($id);
+        if (strpos((string) $mime, 'image/') !== 0) {
+            return new WP_Error('not_an_image', 'Only images have a preview', array('status' => 400));
+        }
+
+        nocache_headers();
+        header('Cache-Control: private, max-age=300');
+        header('X-Content-Type-Options: nosniff');
+
+        $editor = wp_get_image_editor($file);
+        if (!is_wp_error($editor)) {
+            $editor->resize($size, $size, false);
+            $streamed = $editor->stream();
+            if (!is_wp_error($streamed)) exit;
+        }
+
+        if (filesize($file) > 5 * MB_IN_BYTES) {
+            return new WP_Error('too_large', 'No preview for this image', array('status' => 415));
+        }
+
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
+        exit;
+    }
+
+
+    /**
+     * The download files of the signed-in customer's orders, with signed
+     * download links (see ComboStoreDownloads). Only orders that are theirs and
+     * completed or paid have downloads; staff may ask for any order.
+     *
+     * Body: { order_ids: [..] } (up to 100). Response: { downloads: { order_id: [..] } }
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_order_downloads($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+
+        $order_ids = isset($request['order_ids']) ? (array) $request['order_ids'] : [];
+
+        $ComboStoreDownloads = new ComboStoreDownloads();
+        $downloads = $ComboStoreDownloads->get_downloads_for_orders($order_ids, $auth['user']->ID, $auth['is_staff']);
+
+        die(wp_json_encode(['downloads' => (object) $downloads]));
+    }
+
+
+    /**
+     * Run subscription renewals now (staff). The daily job does the same.
+     *
+     * Body: { subscription_ids?: [..] } - given, those subscriptions are billed
+     * now whatever their date (the dashboard's "Create renewal order now");
+     * omitted, every subscription that is due.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function run_subscription_renewals($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+        if (!$auth['is_staff']) {
+            return new WP_Error('forbidden', 'Only store staff can run renewals', array('status' => 403));
+        }
+
+        $ids = isset($request['subscription_ids']) ? (array) $request['subscription_ids'] : [];
+
+        $ComboStoreSubscriptions = new ComboStoreSubscriptions();
+        $result = $ComboStoreSubscriptions->process_due_renewals($ids);
+
+        die(wp_json_encode(['status' => 'success'] + $result));
+    }
+
+
+    /**
+     * Stream a purchased file from a signed link made by get_order_downloads.
+     *
+     * @param WP_REST_Request $request Query: u, order, file, expires, sig.
+     */
+    public function download_file($request)
+    {
+        $ComboStoreDownloads = new ComboStoreDownloads();
+
+        $file_id = $ComboStoreDownloads->verify_link($request->get_query_params());
+        if (is_wp_error($file_id)) return $file_id;
+
+        $streamed = $ComboStoreDownloads->stream($file_id);
+        if (is_wp_error($streamed)) return $streamed;
+    }
+
+
+    /**
      * Return Posts
      *
      * @since 1.0.0
@@ -4182,11 +4529,35 @@ class ComboStoreRest
         $order     = isset($request['order']) ? sanitize_text_field($request['order']) : "";
         $keyword     = isset($request['keyword']) ? sanitize_text_field($request['keyword']) : "";
 
+        /*
+            Restricted media (uploads/combostore, marked _combostore_secure) is
+            listed to store staff only: this endpoint is public, and the names
+            of paid downloads should not be. `restricted` = "all" (default),
+            "only" or "exclude"; anyone without a staff token gets "exclude".
+        */
+        $restricted = isset($request['restricted']) ? sanitize_key($request['restricted']) : 'all';
+        $restricted = in_array($restricted, ['all', 'only', 'exclude'], true) ? $restricted : 'all';
+
+        $is_staff = false;
+        if ($request->get_header('Authorization')) {
+            $auth = $this->license_request_user($request);
+            $is_staff = !is_wp_error($auth) && $auth['is_staff'];
+        }
+        if (!$is_staff) {
+            $restricted = 'exclude';
+        }
+
 
         $query_args = [];
 
         $query_args['post_type'] = 'attachment';
         $query_args['post_status'] = 'inherit';
+
+        if ($restricted === 'only') {
+            $query_args['meta_query'] = [['key' => '_combostore_secure', 'value' => '1']];
+        } elseif ($restricted === 'exclude') {
+            $query_args['meta_query'] = [['key' => '_combostore_secure', 'compare' => 'NOT EXISTS']];
+        }
 
         if (!empty($paged)) {
             $query_args['paged'] = $paged;
@@ -4218,7 +4589,9 @@ class ComboStoreRest
                     "title" => $post_data->post_title,
                     "src" => wp_get_attachment_url($post_id),
                     "id" => $post_id,
-
+                    "mime" => $post_data->post_mime_type,
+                    /* Its src returns 403; it is a file reference, not something to display. */
+                    "restricted" => (bool) get_post_meta($post_id, '_combostore_secure', true),
                 ];
             endwhile;
             wp_reset_query();
@@ -4227,6 +4600,9 @@ class ComboStoreRest
 
 
 
+        /* The picker shows a count and pages; these were never sent. */
+        $response['total'] = (int) $wp_query->found_posts;
+        $response['max_pages'] = (int) $wp_query->max_num_pages;
         $response['posts'] = $posts;
 
         die(wp_json_encode($response));
@@ -4423,7 +4799,6 @@ class ComboStoreRest
             "related_posts" => $relatedPrompts,
         ];
 
-        error_log(wp_json_encode($promptData));
 
         $response['post'] = $promptData;
 
@@ -4480,11 +4855,17 @@ class ComboStoreRest
         $user_id = 1;
         $slug     = isset($request['path']) ? sanitize_text_field($request['path']) : '';
         $id     = isset($request['id']) ? sanitize_text_field($request['id']) : '';
+        $post_type     = isset($request['post_type']) ? sanitize_text_field($request['post_type']) : '';
 
 
 
+        $postData = null;
         $promptData = [];
         if ($slug) {
+
+
+            $slug = str_replace('', '/', $slug); // Replace spaces with hyphens
+            error_log("slug: $slug");
 
 
             if ($slug == "home") {
@@ -4492,6 +4873,12 @@ class ComboStoreRest
                 $postData = get_post($front_page_id);
             } else {
                 $postData = get_page_by_path($slug, OBJECT, 'page');
+            }
+
+            if ($post_type) {
+                $postData = get_page_by_path($slug, OBJECT, $post_type);
+            } else {
+                $postData = get_page_by_path($slug, OBJECT, 'post');
             }
         } else {
 
@@ -4561,6 +4948,22 @@ class ComboStoreRest
      * @param WP_REST_Request $request
      * @return string[]
      */
+    /**
+     * Null for staff who may change shipping zones and methods, otherwise the
+     * error to return: 401 without a valid token, 403 for anyone else.
+     */
+    private function shipping_staff_only($request)
+    {
+        $roles = $this->request_user_roles($request);
+        if (!$roles) {
+            return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
+        }
+        if (!array_intersect($roles, ['administrator', 'store_manager', 'shop_manager'])) {
+            return new WP_Error('forbidden', 'You are not allowed to change shipping zones or methods.', array('status' => 403));
+        }
+        return null;
+    }
+
     private function request_user_roles($request)
     {
         $token = $request->get_header('Authorization');
@@ -4580,6 +4983,51 @@ class ComboStoreRest
 
         return ($user && isset($user->roles)) ? (array) $user->roles : [];
     }
+    /**
+     * The lowest and highest effective price (sale price when set, else
+     * regular price) among published, listed products, optionally within
+     * category slugs (`categories`) - the bounds of the grid filters' price
+     * field (postGridFilters). { min, max }, both 0 when there are none.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_price_range($request)
+    {
+        global $wpdb;
+
+        $categories = isset($request['categories']) ? array_values(array_filter(array_map('sanitize_title', (array) $request['categories']))) : [];
+
+        $args = [
+            'post_type' => 'cmb_product',
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'no_found_rows' => true,
+            'tax_query' => [[
+                'taxonomy' => 'product_visibility',
+                'field'    => 'slug',
+                'terms'    => ['exclude-from-search', 'exclude-from-catalog'],
+                'operator' => 'NOT IN',
+            ]],
+        ];
+        if ($categories) {
+            $args['tax_query'][] = ['taxonomy' => 'product_cat', 'field' => 'slug', 'terms' => $categories, 'operator' => 'IN'];
+        }
+
+        $ids = array_map('absint', (new WP_Query($args))->posts);
+        if (!$ids) return ['min' => 0, 'max' => 0];
+
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT MIN(CASE WHEN sale_price > 0 THEN sale_price ELSE regular_price END) AS min_price,
+                    MAX(CASE WHEN sale_price > 0 THEN sale_price ELSE regular_price END) AS max_price
+             FROM {$wpdb->prefix}cstore_products WHERE product_id IN ($placeholders)",
+            $ids
+        ), ARRAY_A);
+
+        return ['min' => (float) ($row['min_price'] ?? 0), 'max' => (float) ($row['max_price'] ?? 0)];
+    }
+
 
     /**
      * Return Posts
@@ -4648,6 +5096,17 @@ class ComboStoreRest
         $post__not_in     = isset($request['post__not_in']) ? stripslashes_deep($request['post__not_in']) : [];
         $stock_status     = isset($request['stock_status']) ? stripslashes_deep($request['stock_status']) : null;
 
+        /*
+            The storefront's grid filters (postGridFilters): filter_categories
+            narrows the grid to these category slugs on top of its own query and
+            an archive's term (both must match), and min_price / max_price limit
+            products by their effective price (sale price when set, else regular
+            price), which lives in cstore_products.
+        */
+        $filter_categories = isset($request['filter_categories']) ? array_values(array_filter(array_map('sanitize_title', (array) $request['filter_categories']))) : [];
+        $min_price = isset($request['min_price']) && $request['min_price'] !== '' && is_numeric($request['min_price']) ? floatval($request['min_price']) : null;
+        $max_price = isset($request['max_price']) && $request['max_price'] !== '' && is_numeric($request['max_price']) ? floatval($request['max_price']) : null;
+
 
 
 
@@ -4684,8 +5143,49 @@ class ComboStoreRest
                     'operator'    => 'IN',
                 );
             }
+
+            if (!empty($filter_categories)) {
+                $tax_query[] = array(
+                    'taxonomy' => 'category',
+                    'field'    => 'slug',
+                    'terms'    => $filter_categories,
+                    'operator'    => 'IN',
+                );
+            }
         }
         if (in_array('cmb_product', $post_type)) {
+
+            if (!empty($filter_categories)) {
+                $tax_query[] = array(
+                    'taxonomy' => 'product_cat',
+                    'field'    => 'slug',
+                    'terms'    => $filter_categories,
+                    'operator'    => 'IN',
+                );
+            }
+
+            if ($min_price !== null || $max_price !== null) {
+                global $wpdb;
+                $effective = "(CASE WHEN sale_price > 0 THEN sale_price ELSE regular_price END)";
+                $where = ['1=1'];
+                $values = [];
+                if ($min_price !== null) {
+                    $where[] = "$effective >= %f";
+                    $values[] = $min_price;
+                }
+                if ($max_price !== null) {
+                    $where[] = "$effective <= %f";
+                    $values[] = $max_price;
+                }
+                $matched = array_map('absint', $wpdb->get_col($wpdb->prepare(
+                    "SELECT product_id FROM {$wpdb->prefix}cstore_products WHERE " . implode(' AND ', $where),
+                    $values
+                )));
+                $wanted = !empty($post__in) ? array_map('absint', (array) $post__in) : null;
+                $post__in = $wanted === null ? $matched : array_values(array_intersect($wanted, $matched));
+                /* No match must mean no products, not "no restriction". */
+                if (empty($post__in)) $post__in = [0];
+            }
 
             if ($stock_status) {
 
@@ -4831,7 +5331,6 @@ class ComboStoreRest
             $query_args['post__not_in'] = array_map('absint', (array) $post__not_in);
         }
 
-        error_log(wp_json_encode($query_args));
 
 
         $wp_query = new WP_Query($query_args);
@@ -5288,6 +5787,16 @@ class ComboStoreRest
         }
         if ($order) {
             $termsQuery['order'] = $order;
+        }
+        /*
+            The builder's terms query (TermsQueryPrams.jsx) saves an orderby;
+            it used to be dropped here, so every grid came back by name. Only
+            the term orderings the builder offers pass: anything else (an old
+            post-style "date" or "rand") keeps WordPress's default.
+        */
+        $orderby = isset($request['orderby']) ? sanitize_key($request['orderby']) : '';
+        if (in_array($orderby, ['name', 'slug', 'count', 'term_id', 'parent'], true)) {
+            $termsQuery['orderby'] = $orderby;
         }
         if ($slug) {
             $termsQuery['slug'] = $slug;
@@ -5905,6 +6414,32 @@ class ComboStoreRest
 
 
 
+    /** True for the values the dashboard and importers use to mean "featured". */
+    private static function is_truthy_featured($value)
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+        return in_array(strtolower(trim((string) $value)), array('1', 'yes', 'true', 'on'), true);
+    }
+
+    /**
+     * Products are featured with post meta "featured" = '1'; not featured means
+     * no meta at all, so get_post_meta() returns '' and the dashboard's
+     * truthiness checks keep working.
+     */
+    private function save_product_featured($post_id, $value)
+    {
+        if (self::is_truthy_featured($value)) {
+            update_post_meta($post_id, 'featured', '1');
+        } else {
+            delete_post_meta($post_id, 'featured');
+        }
+    }
+
     /**
      * Return Posts
      *
@@ -5956,7 +6491,7 @@ class ComboStoreRest
 
 
 
-        $post_type     = isset($request['post_type']) ? stripslashes_deep($request['post_type']) : ['post'];
+        $post_type     = isset($request['post_type']) ? stripslashes_deep($request['post_type']) : ['cmb_product'];
         $paged     = isset($request['paged']) ? absint($request['paged']) : 1;
         $posts_per_page     = isset($request['posts_per_page']) ? absint($request['posts_per_page']) : 20;
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
@@ -5971,6 +6506,11 @@ class ComboStoreRest
         $post__in     = isset($request['post__in']) ? stripslashes_deep($request['post__in']) : [];
         $post__not_in     = isset($request['post__not_in']) ? stripslashes_deep($request['post__not_in']) : [];
         $stock_status     = isset($request['stock_status']) ? stripslashes_deep($request['stock_status']) : null;
+        /* true / 1 / 'yes' = featured only, 'no' = not featured, anything else = no filter. */
+        $featured_filter = isset($request['featured']) ? $request['featured'] : null;
+        /* Sticky on top: featured products first, then the normal order. Opt-in
+           (featured_first, or sticky) so the admin list and existing grids keep their order. */
+        $featured_first = self::is_truthy_featured($request['featured_first'] ?? ($request['sticky'] ?? false));
 
         $is_admin     = isset($request['is_admin']) ? ($request['is_admin']) : false;
 
@@ -5981,7 +6521,7 @@ class ComboStoreRest
         $meta_query = [];
         $tax_query = [];
 
-        $query_args['post_type'] = 'cmb_product';
+        $query_args['post_type'] = $post_type;
         $query_args['post_status'] = 'publish';
 
         if ($isAdmin) {
@@ -6110,6 +6650,28 @@ class ComboStoreRest
 
 
 
+        /*
+           Featured products: post meta "featured" = '1' (what the editor, bulk
+           update and the Woo importer write). Older rows may hold 'yes'/'true'.
+        */
+        if ($featured_filter !== null && $featured_filter !== '' && $featured_filter !== false) {
+            $featured_values = array('1', 'yes', 'true', 'on');
+            $wants_not = is_string($featured_filter) && in_array(strtolower($featured_filter), array('no', 'exclude'), true);
+
+            if ($wants_not) {
+                $meta_query[] = array(
+                    'relation' => 'OR',
+                    array('key' => 'featured', 'compare' => 'NOT EXISTS'),
+                    array('key' => 'featured', 'value' => $featured_values, 'compare' => 'NOT IN'),
+                );
+            } elseif (self::is_truthy_featured($featured_filter)) {
+                $meta_query[] = array(
+                    'key'     => 'featured',
+                    'value'   => $featured_values,
+                    'compare' => 'IN',
+                );
+            }
+        }
         if (!empty($posts_per_page)) {
             $query_args['posts_per_page'] = $posts_per_page;
         }
@@ -6131,7 +6693,40 @@ class ComboStoreRest
 
 
 
-        $wp_query = new WP_Query($query_args);
+        /*
+           Sticky on top. Done in SQL (not by merging two queries) so paging and
+           found_posts stay right: featured first, then whatever order was asked for.
+           EXISTS, not a JOIN, so a product with two "featured" rows is not listed twice.
+        */
+        $featured_first_orderby = null;
+        if ($featured_first) {
+            $featured_first_orderby = function ($orderby, $query) use (&$featured_first_query) {
+                if ($query !== $featured_first_query) {
+                    return $orderby;
+                }
+                global $wpdb;
+                $sticky = "EXISTS (SELECT 1 FROM {$wpdb->postmeta} cs_featured WHERE cs_featured.post_id = {$wpdb->posts}.ID AND cs_featured.meta_key = 'featured' AND cs_featured.meta_value IN ('1','yes','true','on')) DESC";
+                $requested = (string) $orderby;
+                $orderby = $requested !== '' ? $sticky . ', ' . $requested : $sticky;
+
+                // Tie-breaker: products saved with the same date would otherwise
+                // swap between pages and show up twice. Not for random order.
+                if (stripos($requested, 'RAND(') === false && stripos($requested, "{$wpdb->posts}.ID") === false) {
+                    $orderby .= ", {$wpdb->posts}.ID DESC";
+                }
+
+                return $orderby;
+            };
+            add_filter('posts_orderby', $featured_first_orderby, 10, 2);
+        }
+
+        $featured_first_query = new WP_Query();
+        $wp_query = $featured_first_query;
+        $wp_query->query($query_args);
+
+        if ($featured_first_orderby) {
+            remove_filter('posts_orderby', $featured_first_orderby, 10);
+        }
 
 
         $entries = [];
@@ -7297,7 +7892,6 @@ class ComboStoreRest
         $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 100;
         $per_page     = $per_page > 0 ? min($per_page, 1000) : 100;
 
-        // error_log($per_page);
 
 
         $orderby     = isset($request['orderby']) ? sanitize_text_field($request['orderby']) : "";
@@ -7826,6 +8420,28 @@ class ComboStoreRest
 
 
         $response = [];
+
+        /* One code, one coupon - checked before anything is saved. Two coupons
+           with the same code made the cart pick whichever was newest. */
+        $coupon_code = isset($body_arr['couponCode']) ? trim(sanitize_text_field($body_arr['couponCode'])) : '';
+        if ($coupon_code !== '') {
+            $clash = get_posts([
+                'post_type'    => 'coupon',
+                'post_status'  => ['publish', 'draft', 'pending', 'private', 'future'],
+                'meta_key'     => 'couponCode',
+                'meta_value'   => $coupon_code,
+                'post__not_in' => [(int) $post_id],
+                'fields'       => 'ids',
+                'numberposts'  => 1,
+            ]);
+            if (!empty($clash)) {
+                $response['errors'] = true;
+                /* translators: 1: coupon code, 2: the other coupon's ID */
+                $response['message'] = sprintf(__('The code %1$s is already used by coupon #%2$d. Pick another code.', 'combostore-server'), $coupon_code, $clash[0]);
+                die(wp_json_encode($response));
+            }
+        }
+
         $postData = [
             "ID" => $post_id,
             "post_title" => $post_title,
@@ -7835,10 +8451,85 @@ class ComboStoreRest
 
 
         if (isset($body_arr['couponType'])) {
-            update_post_meta($post_id, 'couponType', $body_arr['couponType']);
+            /* percent | fixed | free_shipping - anything else would price as no discount at all. */
+            $coupon_type = in_array($body_arr['couponType'], ['percent', 'fixed', 'free_shipping'], true) ? $body_arr['couponType'] : 'percent';
+            update_post_meta($post_id, 'couponType', $coupon_type);
+        }
+        /* limit was shown in the editor but never saved. */
+        if (isset($body_arr['limit'])) {
+            update_post_meta($post_id, 'limit', $body_arr['limit'] === '' ? '' : absint($body_arr['limit']));
+        }
+        /*
+            Addons: each switches on one restriction. One that is off has its
+            fields cleared, so a rule hidden in the editor never keeps applying.
+        */
+        if (isset($body_arr['addons']) && is_array($body_arr['addons'])) {
+            $addons = array_values(array_intersect(self::COUPON_ADDONS, array_map('strval', $body_arr['addons'])));
+            update_post_meta($post_id, 'addons', $addons);
+
+            $addon_fields = [
+                'products'   => ['products' => []],
+                'categories' => ['categories' => []],
+                'spend'      => ['minSpend' => '', 'maxSpend' => ''],
+                'expiry'     => ['startDate' => '', 'endDate' => ''],
+                'customer'   => ['customerRule' => ''],
+                'user'       => ['users' => []],
+            ];
+            foreach ($addon_fields as $addon => $fields) {
+                if (!in_array($addon, $addons, true)) {
+                    $body_arr = array_merge($body_arr, $fields);
+                }
+            }
+        }
+
+        foreach (['minSpend', 'maxSpend', 'maxDiscount'] as $money_key) {
+            if (isset($body_arr[$money_key])) {
+                $money = $body_arr[$money_key] === '' ? '' : max(0, (float) $body_arr[$money_key]);
+                update_post_meta($post_id, $money_key, $money);
+            }
+        }
+        if (isset($body_arr['freeShipping'])) {
+            update_post_meta($post_id, 'freeShipping', rest_sanitize_boolean($body_arr['freeShipping']) ? 'yes' : '');
+        }
+        if (isset($body_arr['products']) && is_array($body_arr['products'])) {
+            $products = [];
+            foreach ($body_arr['products'] as $item) {
+                $product_id = absint(is_array($item) ? ($item['id'] ?? 0) : $item);
+                if ($product_id) {
+                    $products[$product_id] = ['id' => $product_id, 'title' => get_the_title($product_id)];
+                }
+            }
+            update_post_meta($post_id, 'products', array_values($products));
+        }
+        if (isset($body_arr['categories']) && is_array($body_arr['categories'])) {
+            $categories = [];
+            foreach ($body_arr['categories'] as $item) {
+                $term = get_term(absint(is_array($item) ? ($item['term_id'] ?? 0) : $item), 'product_cat');
+                if ($term && !is_wp_error($term)) {
+                    $categories[$term->term_id] = ['term_id' => $term->term_id, 'name' => $term->name, 'slug' => $term->slug];
+                }
+            }
+            update_post_meta($post_id, 'categories', array_values($categories));
+        }
+        if (isset($body_arr['users']) && is_array($body_arr['users'])) {
+            $users = [];
+            foreach ($body_arr['users'] as $item) {
+                $person = get_user_by('id', absint(is_array($item) ? ($item['id'] ?? 0) : $item));
+                if ($person) {
+                    $users[$person->ID] = ['id' => $person->ID, 'name' => $person->display_name, 'email' => $person->user_email];
+                }
+            }
+            update_post_meta($post_id, 'users', array_values($users));
+        }
+        if (isset($body_arr['customerRule'])) {
+            $rule = in_array($body_arr['customerRule'], ['logged_in', 'new', 'returning'], true) ? $body_arr['customerRule'] : '';
+            update_post_meta($post_id, 'customerRule', $rule);
         }
         if (isset($body_arr['couponCode'])) {
-            update_post_meta($post_id, 'couponCode', $body_arr['couponCode']);
+            /* One code, one coupon. Two published coupons with the same code made
+               the cart pick whichever was newest. Codes match case-insensitively,
+               as the lookup does. */
+            update_post_meta($post_id, 'couponCode', trim(sanitize_text_field($body_arr['couponCode'])));
         }
         if (isset($body_arr['startDate'])) {
             update_post_meta($post_id, 'startDate', $body_arr['startDate']);
@@ -8238,6 +8929,16 @@ class ComboStoreRest
                 "startDate" => $startDate,
                 "endDate" => $endDate,
                 "limit" => $limit,
+                "minSpend" => get_post_meta($post_id, 'minSpend', true),
+                "maxSpend" => get_post_meta($post_id, 'maxSpend', true),
+                "maxDiscount" => get_post_meta($post_id, 'maxDiscount', true),
+                "freeShipping" => get_post_meta($post_id, 'freeShipping', true) === 'yes',
+                "addons" => $this->coupon_list_meta($post_id, 'addons'),
+                "products" => $this->coupon_list_meta($post_id, 'products'),
+                "categories" => $this->coupon_list_meta($post_id, 'categories'),
+                "customerRule" => get_post_meta($post_id, 'customerRule', true),
+                /* Names and emails: this route is staff-only (require_coupon_staff above). */
+                "users" => $this->coupon_list_meta($post_id, 'users'),
 
             ];
 
@@ -8313,8 +9014,19 @@ class ComboStoreRest
             if (!empty($posts)) {
                 $post_id = $posts[0]; // first matching post ID
             } else {
+                /* A draft coupon is not "missing" - say it is not live, so the store owner knows to publish it. */
+                $unpublished = get_posts([
+                    'post_type'   => 'coupon',
+                    'post_status' => ['draft', 'pending', 'private', 'future'],
+                    'meta_key'    => 'couponCode',
+                    'meta_value'  => $couponCode,
+                    'fields'      => 'ids',
+                    'numberposts' => 1,
+                ]);
                 $response['errors'] = true;
-                $response['message'] = __("Coupon doesn't exist.", 'combostore-server');
+                $response['message'] = !empty($unpublished)
+                    ? __("This coupon isn't active yet.", 'combostore-server')
+                    : __("Coupon doesn't exist.", 'combostore-server');
                 die(wp_json_encode($response));
             }
         }
@@ -8334,8 +9046,10 @@ class ComboStoreRest
         $amount = get_post_meta($post_id, 'amount', true);
 
         $today = new DateTime(); // current date
-        $start = new DateTime($startDate);
-        $end   = new DateTime($endDate);
+        /* An empty date is no bound. new DateTime('') is "now", which put a coupon
+           with no start date permanently "waiting" and one with no end date expired. */
+        $start = !empty($startDate) ? new DateTime($startDate) : new DateTime('@0');
+        $end   = !empty($endDate) ? new DateTime($endDate) : new DateTime('9999-12-31');
 
         if ($today <= $start) {
             $status = "waiting";
@@ -8373,8 +9087,95 @@ class ComboStoreRest
             "endDate" => $endDate,
             "limit" => $limit,
             "status" => $status,
+            "minSpend" => get_post_meta($post_id, 'minSpend', true),
+            "maxSpend" => get_post_meta($post_id, 'maxSpend', true),
+            "maxDiscount" => get_post_meta($post_id, 'maxDiscount', true),
+            "freeShipping" => get_post_meta($post_id, 'freeShipping', true) === 'yes',
+            /* What the cart needs to price only the covered lines. The chosen users stay private. */
+            "products" => array_map(function ($p) {
+                return ['id' => $p['id'] ?? 0, 'title' => $p['title'] ?? ''];
+            }, $this->coupon_list_meta($post_id, 'products')),
+            "categories" => array_map(function ($c) {
+                return ['term_id' => $c['term_id'] ?? 0, 'name' => $c['name'] ?? '', 'slug' => $c['slug'] ?? ''];
+            }, $this->coupon_list_meta($post_id, 'categories')),
 
         ];
+
+        $refuse = function ($message) {
+            die(wp_json_encode(['errors' => true, 'message' => $message]));
+        };
+
+        /* A percent / flat coupon with no amount and no free delivery "applied" and took nothing off. */
+        if (
+            in_array($couponType, ['percent', 'fixed', ''], true) && (float) $amount <= 0
+            && get_post_meta($post_id, 'freeShipping', true) !== 'yes'
+        ) {
+            $refuse(__("This coupon doesn't have a discount set up yet.", 'combostore-server'));
+        }
+
+        /* Spend, when the cart sent its subtotal. The cart re-checks as items change. */
+        $min_spend = (float) get_post_meta($post_id, 'minSpend', true);
+        $max_spend = (float) get_post_meta($post_id, 'maxSpend', true);
+        $cart_total = isset($request['cartTotal']) ? (float) $request['cartTotal'] : null;
+        if ($min_spend > 0 && $cart_total !== null && $cart_total < $min_spend) {
+            /* translators: %s: minimum cart subtotal */
+            $refuse(sprintf(__('Add items worth at least %s to use this coupon.', 'combostore-server'), $min_spend));
+        }
+        if ($max_spend > 0 && $cart_total !== null && $cart_total > $max_spend) {
+            /* translators: %s: maximum cart subtotal */
+            $refuse(sprintf(__('This coupon is only for carts up to %s.', 'combostore-server'), $max_spend));
+        }
+
+        /* Products / categories: at least one cart line has to be covered. Categories
+           are read from the product itself, not from what the cart says it has. */
+        $coupon_products = array_map('absint', wp_list_pluck($this->coupon_list_meta($post_id, 'products'), 'id'));
+        $coupon_categories = array_map('absint', wp_list_pluck($this->coupon_list_meta($post_id, 'categories'), 'term_id'));
+        $cart_items = isset($request['cartItems']) && is_array($request['cartItems']) ? $request['cartItems'] : null;
+        if ((!empty($coupon_products) || !empty($coupon_categories)) && $cart_items !== null) {
+            $covered = false;
+            foreach ($cart_items as $item) {
+                $product_id = absint(is_array($item) ? ($item['product_id'] ?? 0) : 0);
+                if (!$product_id) {
+                    continue;
+                }
+                if (
+                    in_array($product_id, $coupon_products, true)
+                    || (!empty($coupon_categories) && has_term($coupon_categories, 'product_cat', $product_id))
+                ) {
+                    $covered = true;
+                    break;
+                }
+            }
+            if (!$covered) {
+                $refuse(__('None of the items in your cart qualify for this coupon.', 'combostore-server'));
+            }
+        }
+
+        /* Customer / user rules: who the shopper is comes from their token only. */
+        $customer_rule = get_post_meta($post_id, 'customerRule', true);
+        $coupon_users = array_map('absint', wp_list_pluck($this->coupon_list_meta($post_id, 'users'), 'id'));
+        if (!empty($customer_rule) || !empty($coupon_users)) {
+            $shopper = $request->get_header('Authorization') ? $this->get_ticket_user($request) : null;
+            if (!$shopper || is_wp_error($shopper)) {
+                $refuse(__('Please sign in to use this coupon.', 'combostore-server'));
+            }
+            if (!empty($coupon_users) && !in_array((int) $shopper->ID, $coupon_users, true)) {
+                $refuse(__("This coupon isn't available for your account.", 'combostore-server'));
+            }
+            if ($customer_rule === 'new' || $customer_rule === 'returning') {
+                global $wpdb;
+                $past_orders = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$wpdb->prefix}cstore_orders WHERE userid = %d AND status NOT IN ('incomplete', 'draft', 'failed', 'canceled', 'cancelled', 'refunded', 'trash')",
+                    $shopper->ID
+                ));
+                if ($customer_rule === 'new' && $past_orders > 0) {
+                    $refuse(__('This coupon is for your first order only.', 'combostore-server'));
+                }
+                if ($customer_rule === 'returning' && $past_orders === 0) {
+                    $refuse(__('This coupon is for returning customers.', 'combostore-server'));
+                }
+            }
+        }
 
 
 
@@ -9230,8 +10031,34 @@ class ComboStoreRest
         if ($rate < 1 || $rate > 5) {
             $rate = 0;
         }
-        $postType = $request->get_param('postType');
+        /* What the post really is; the client's postType is only a hint. */
+        $postType = get_post_type($postId) ?: $request->get_param('postType');
         $response = [];
+
+        /*
+            A product with the "Reviews" addon follows its own review settings
+            (ComboStoreProduct::sanitize_review_settings). Staff can always reply.
+        */
+        $review_settings = $postType === 'cmb_product' ? $this->product_review_settings($postId) : null;
+        $is_review_staff = $user && array_intersect(['administrator', 'store_manager', 'shop_manager'], (array) $user->roles);
+        $hold_for_approval = false;
+
+        if ($review_settings && !$is_review_staff) {
+            if (!$review_settings['enabled']) {
+                $response['success'] = false;
+                $response['errors']['reviews_closed'] = __("Reviews are closed for this product.", 'combostore-server');
+                $response['message'] = $response['errors']['reviews_closed'];
+                die(wp_json_encode($response));
+            }
+            if ($review_settings['verified_only'] && empty($parentId) && !$this->user_bought_product($user_id, $postId)) {
+                $response['success'] = false;
+                $response['errors']['not_verified'] = __("Only customers who bought this product can review it.", 'combostore-server');
+                $response['message'] = $response['errors']['not_verified'];
+                die(wp_json_encode($response));
+            }
+            $hold_for_approval = $review_settings['require_approval'];
+        }
+
         if ($rate) {
             $has_rated_prams = [
                 "userid" => $user_id,
@@ -9271,7 +10098,7 @@ class ComboStoreRest
             'comment_type' => '', // Empty for regular comments
             'comment_parent' => $parentId, // 0 if it's not a reply
             'user_id' => $user_id, // 0 for guest, or provide a user ID
-            'comment_approved' => 1, // 1 to auto-approve
+            'comment_approved' => $hold_for_approval ? 0 : 1, // held when the product's reviews need approval
             'avatar' => get_avatar_url($user_email),
             'rate' => $rate,
 
@@ -9279,6 +10106,7 @@ class ComboStoreRest
 
         // Insert the comment into the database
         $comment_id = wp_insert_comment($commentdata);
+        $response['pending'] = $hold_for_approval;
 
         if (!$comment_id) {
             $response['success'] = false;
@@ -9292,18 +10120,7 @@ class ComboStoreRest
 
         // Recalculate the rating from the stored ratings, so the average can never drift.
         if ($rate && $postType == 'cmb_product') {
-
-            $rating = $this->calculate_post_rating($postId);
-
-            $ComboStoreProduct = new ComboStoreProduct();
-
-            $ComboStoreProduct->update_product(array(
-                'id'         => $postId,
-                'total_rate' => $rating['total_rate'],
-                'avg_rating' => $rating['avg_rating'],
-            ));
-
-            $response['rating'] = $rating;
+            $response['rating'] = $this->refresh_product_rating($postId);
         }
 
         $action_prams = array_merge($commentdata, ["comment_id" => $comment_id, 'post_id' => $postId]);
@@ -9360,6 +10177,130 @@ class ComboStoreRest
             'total_rate' => isset($row['total_rate']) ? intval($row['total_rate']) : 0,
             'avg_rating' => isset($row['avg_rating']) ? round(floatval($row['avg_rating']), 2) : 0,
         );
+    }
+
+    /**
+     * A product's review settings while its "Reviews" addon is on, else null
+     * (the store's defaults: open, no purchase needed, published at once).
+     */
+    private function product_review_settings($post_id)
+    {
+        global $wpdb;
+        $row = $wpdb->get_row($wpdb->prepare("SELECT addons, review_settings FROM {$wpdb->prefix}cstore_products WHERE product_id = %d", $post_id), ARRAY_A);
+        $addons = $row && $row['addons'] ? json_decode($row['addons'], true) : [];
+        if (!is_array($addons) || !in_array('reviews', $addons, true)) return null;
+        return ComboStoreProduct::sanitize_review_settings($row['review_settings'] ? json_decode($row['review_settings'], true) : []);
+    }
+
+    /** Whether the user has a completed order with this product in it. */
+    private function user_bought_product($user_id, $post_id)
+    {
+        global $wpdb;
+        if (!$user_id || !$post_id) return false;
+        return (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT 1 FROM {$wpdb->prefix}cstore_orders o
+             INNER JOIN {$wpdb->prefix}cstore_order_items i ON i.order_id = o.id
+             WHERE o.userid = %d AND i.product_id = %d AND o.status = 'completed' LIMIT 1",
+            $user_id,
+            $post_id
+        ));
+    }
+
+    /**
+     * Recalculates a product's stored rating (cstore_products total_rate /
+     * avg_rating) from its approved reviews. Written directly: update_product
+     * skips empty values, so a rating that drops to 0 would never be saved.
+     */
+    private function refresh_product_rating($post_id)
+    {
+        global $wpdb;
+        $rating = $this->calculate_post_rating($post_id);
+        $wpdb->update(
+            $wpdb->prefix . 'cstore_products',
+            ['total_rate' => $rating['total_rate'], 'avg_rating' => $rating['avg_rating']],
+            ['product_id' => (int) $post_id],
+            ['%d', '%f'],
+            ['%d']
+        );
+        return $rating;
+    }
+
+    /**
+     * How many approved reviews gave each star: { "1": n, ..., "5": n }.
+     * Public - the storefront's rating bars (productRatings) and the
+     * editor's Reviews card read it.
+     */
+    private function rating_star_counts($post_id)
+    {
+        global $wpdb;
+        $stars = ['1' => 0, '2' => 0, '3' => 0, '4' => 0, '5' => 0];
+        if (!$post_id) return $stars;
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT ROUND(cm.meta_value) AS star, COUNT(*) AS n
+             FROM $wpdb->commentmeta cm INNER JOIN $wpdb->comments c ON c.comment_ID = cm.comment_id
+             WHERE cm.meta_key = 'rate' AND cm.meta_value > 0 AND c.comment_post_ID = %d AND c.comment_approved = '1'
+             GROUP BY ROUND(cm.meta_value)",
+            $post_id
+        ), ARRAY_A);
+        foreach ($rows as $row) {
+            $star = (string) (int) $row['star'];
+            if (isset($stars[$star])) $stars[$star] = (int) $row['n'];
+        }
+        return $stars;
+    }
+
+    /**
+     * The product editor's Reviews card (staff): the rating, how many reviews
+     * gave each star, how many wait for approval, and the latest reviews of
+     * any status. product_id, optional per_page (default 5).
+     */
+    public function get_review_summary($request)
+    {
+        global $wpdb;
+        $user = $this->get_ticket_user($request);
+        if (is_wp_error($user)) return $user;
+        if (!array_intersect(['administrator', 'store_manager', 'shop_manager'], (array) $user->roles)) {
+            return new WP_Error('forbidden', 'You are not allowed to view this', array('status' => 403));
+        }
+
+        $post_id = isset($request['product_id']) ? absint($request['product_id']) : 0;
+        if (!$post_id || get_post_type($post_id) !== 'cmb_product') {
+            return new WP_Error('not_found', 'Product not found', array('status' => 404));
+        }
+        $per_page = isset($request['per_page']) ? min(max(absint($request['per_page']), 1), 50) : 5;
+
+        $stars = $this->rating_star_counts($post_id);
+
+        $counts = wp_count_comments($post_id);
+
+        $latest = get_comments([
+            'post_id' => $post_id,
+            'status'  => 'all',
+            'number'  => $per_page,
+            'orderby' => 'comment_date_gmt',
+            'order'   => 'DESC',
+        ]);
+        $reviews = [];
+        foreach ($latest as $c) {
+            $reviews[] = [
+                'id'       => (int) $c->comment_ID,
+                'author'   => $c->comment_author,
+                'avatar'   => get_avatar_url($c->comment_author_email, ['size' => 40]),
+                'content'  => $c->comment_content,
+                'rate'     => (float) get_comment_meta($c->comment_ID, 'rate', true),
+                'status'   => $c->comment_approved === '1' ? 'approved' : ($c->comment_approved === '0' ? 'pending' : $c->comment_approved),
+                'parent'   => (int) $c->comment_parent,
+                'date'     => $c->comment_date,
+                'verified' => $c->user_id ? $this->user_bought_product((int) $c->user_id, $post_id) : false,
+            ];
+        }
+
+        return array_merge($this->calculate_post_rating($post_id), [
+            'stars'    => $stars,
+            'approved' => (int) $counts->approved,
+            'pending'  => (int) $counts->moderated,
+            'reviews'  => $reviews,
+        ]);
     }
     /**
      * Return Posts
@@ -9719,6 +10660,7 @@ class ComboStoreRest
 
         $done = 0;
         $skipped = 0;
+        $products = [];
 
         foreach ($ids as $id) {
             $comment = get_comment($id);
@@ -9728,15 +10670,31 @@ class ComboStoreRest
                 continue;
             }
 
+            /* trash / spam through WordPress's own functions, which remember the
+               status to restore; setting the status directly lost it, so a
+               restored review came back pending. */
             if ($action === 'untrash') {
                 $ok = wp_untrash_comment($id);
             } elseif ($action === 'unspam') {
                 $ok = wp_unspam_comment($id);
+            } elseif ($action === 'trash') {
+                $ok = wp_trash_comment($id);
+            } elseif ($action === 'spam') {
+                $ok = wp_spam_comment($id);
             } else {
                 $ok = wp_set_comment_status($id, $action);
             }
 
             $ok ? $done++ : $skipped++;
+
+            if ($ok && get_post_type($comment->comment_post_ID) === 'cmb_product') {
+                $products[(int) $comment->comment_post_ID] = true;
+            }
+        }
+
+        /* Approving, holding or trashing a review changes the product's rating. */
+        foreach (array_keys($products) as $product_id) {
+            $this->refresh_product_rating($product_id);
         }
 
         die(wp_json_encode(['success' => true, 'done' => $done, 'skipped' => $skipped]));
@@ -10031,6 +10989,19 @@ class ComboStoreRest
      * @param WP_REST_Request $request
      * @return WP_User|WP_Error
      */
+    /* The coupon editor's addons, each one restriction. */
+    const COUPON_ADDONS = ['products', 'categories', 'spend', 'expiry', 'customer', 'user'];
+
+    /**
+     * A coupon meta that holds a list (addons, products, categories, users),
+     * always as an array - unset or legacy values read as empty.
+     */
+    private function coupon_list_meta($post_id, $key)
+    {
+        $value = get_post_meta($post_id, $key, true);
+        return is_array($value) ? array_values($value) : [];
+    }
+
     private function require_coupon_staff($request)
     {
         $user = $this->get_ticket_user($request);
@@ -10168,6 +11139,8 @@ class ComboStoreRest
                     "endDate" => $endDate,
                     "limit" => $limit,
                     "amount" => $amount,
+                    "minSpend" => get_post_meta($post_id, 'minSpend', true),
+                    "freeShipping" => get_post_meta($post_id, 'freeShipping', true) === 'yes',
 
                 ];
 
@@ -10270,8 +11243,11 @@ class ComboStoreRest
         $brands = $brands ? $brands : [];
 
         $visibility = get_the_terms($post_id, 'product_visibility');
-        $visibility = $visibility ? $visibility : [];
 
+        error_log(wp_json_encode($visibility));
+
+
+        $visibility = $visibility ? $visibility : [];
 
 
 
@@ -10394,9 +11370,16 @@ class ComboStoreRest
                 'upsells',
                 'crosssells',
                 'faq',
+                'size_guide',
+                'deal',
+                'warranty',
+                'seo',
+                'review_settings',
                 'attributes',
                 'related_products',
                 'product_template',
+                'license',
+                'subscription',
             ];
 
             foreach ($json_fields as $field) {
@@ -10458,6 +11441,8 @@ class ComboStoreRest
 
             $productData['variations'] = $variations;
             $productData['price'] = $price;
+            /* How many approved reviews gave each star, for the productRatings bars. */
+            $productData['rating_stars'] = $this->rating_star_counts($post_id);
             unset($product_data['id']);
 
             $response['product'] = array_merge($productData, $product_data);
@@ -10922,7 +11907,15 @@ class ComboStoreRest
             "post_parent" => $post_parent,
             "menu_order" => $menu_order,
         ];
-        wp_update_post($postData);
+        $updated = wp_update_post($postData);
+
+        if ($updated) {
+            $response['success'] = true;
+            $response['message'] = 'The product has been updated successfully.';
+        } else {
+            $response['success'] = false;
+            $response['message'] = 'The product data could not be updated.';
+        }
 
         wp_set_post_terms($post_id, $categoryIds, 'product_cat');
         wp_set_post_terms($post_id, $tagIds, 'product_tag');
@@ -10935,15 +11928,26 @@ class ComboStoreRest
 
         set_post_thumbnail($post_id, $post_thumbnail_id);
 
+        /* The editor's star was read but never saved. */
+        if ($request->has_param('featured')) {
+            $this->save_product_featured($post_id, $featured);
+        }
+
 
         $body_arr['id'] = $post_id;
 
         $ComboStoreProduct = new ComboStoreProduct();
 
 
-        $ComboStoreProduct->update_product($body_arr);
+        $dataUpdate = $ComboStoreProduct->update_product($body_arr);
 
-
+        if ($dataUpdate) {
+            $response['success'] = true;
+            $response['message'] = 'The product data has been updated successfully.';
+        } else {
+            $response['success'] = false;
+            $response['message'] = 'The product data could not be updated.';
+        }
 
 
         die(wp_json_encode($response));
@@ -11063,6 +12067,378 @@ class ComboStoreRest
     }
 
     /**
+     * Order tracking for the storefront (the `orderTracking` element).
+     *
+     * POST { order_id, contact } - the order number, and the phone number or
+     * email on the order. A signed-in customer who owns the order may leave
+     * contact out. Phones are compared on their last 10 digits (as the Fraud
+     * Checker's phone limit does), emails ignoring case.
+     *
+     * Every miss - no such order, wrong contact, an order never really
+     * placed (incomplete, draft, trashed) - gets the same reply, so the form
+     * cannot be used to learn which order numbers exist. Lookups are limited
+     * per IP address.
+     *
+     * Only what a tracking page needs is returned: status, dates, total,
+     * item names and quantities, and each delivery's courier, tracking code
+     * and status history. No address, phone, email, costs or profit, and no
+     * rider coordinates.
+     *
+     * @param WP_REST_Request $request
+     */
+    public function track_order($request)
+    {
+        $not_found = array(
+            'status'  => 'failed',
+            'code'    => 'not_found',
+            'message' => "We couldn't find an order with those details. Check the order number and the phone number or email you ordered with.",
+        );
+
+        /* 20 lookups per 10 minutes per IP address. */
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown';
+        $rate_key = 'cs_track_order_' . md5($ip);
+        $attempts = (int) get_transient($rate_key);
+
+        if ($attempts >= 20) {
+            die(wp_json_encode(array(
+                'status'  => 'failed',
+                'code'    => 'too_many_requests',
+                'message' => 'Too many lookups. Please wait a few minutes and try again.',
+            )));
+        }
+
+        set_transient($rate_key, $attempts + 1, 10 * MINUTE_IN_SECONDS);
+
+        $order_id = isset($request['order_id']) ? absint(preg_replace('/\D+/', '', (string) $request['order_id'])) : 0;
+        $contact = isset($request['contact']) ? trim(sanitize_text_field($request['contact'])) : '';
+
+        if (!$order_id) {
+            die(wp_json_encode($not_found));
+        }
+
+        global $wpdb;
+        $prefix = $wpdb->prefix;
+
+        $order = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, userid, status, payment_status, payment_method, shipping_method, total_amount, currency, billing_phone, shipping_phone, billing_email, created_at, completed_at FROM {$prefix}cstore_orders WHERE id = %d",
+            $order_id
+        ), ARRAY_A);
+
+        if (empty($order) || in_array($order['status'], array('incomplete', 'draft', 'trash'), true)) {
+            die(wp_json_encode($not_found));
+        }
+
+        /* Who may see it: the signed-in owner, or someone who knows its phone or email. */
+        $token_user_id = $this->request_user_id($request);
+        $allowed = $token_user_id && (int) $order['userid'] === $token_user_id;
+
+        if (!$allowed && $contact !== '') {
+            if (strpos($contact, '@') !== false) {
+                $allowed = strtolower($contact) === strtolower(trim((string) $order['billing_email']));
+            } else {
+                $wanted = $this->normalize_order_phone($contact);
+                $allowed = $wanted !== '' && (
+                    $wanted === $this->normalize_order_phone($order['billing_phone']) ||
+                    $wanted === $this->normalize_order_phone($order['shipping_phone'])
+                );
+            }
+        }
+
+        if (!$allowed) {
+            die(wp_json_encode($not_found));
+        }
+
+        $items = array();
+        $ComboStoreOrders = new ComboStoreOrders();
+
+        foreach ((array) $ComboStoreOrders->get_order_items($order_id) as $item) {
+            $items[] = array(
+                'name'     => isset($item->product_name) ? (string) $item->product_name : '',
+                'quantity' => isset($item->quantity) ? (int) $item->quantity : 1,
+            );
+        }
+
+        $deliveries = array();
+        $delivery_rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, courier, tracking_code, tracking_link, status, datetime FROM {$prefix}cstore_deliveries WHERE order_id = %d ORDER BY id ASC",
+            $order_id
+        ), ARRAY_A);
+
+        foreach ((array) $delivery_rows as $delivery) {
+            $events = $wpdb->get_results($wpdb->prepare(
+                "SELECT status, notes, datetime FROM {$prefix}cstore_deliveries_trackings WHERE delivery_id = %d ORDER BY datetime DESC, id DESC",
+                $delivery['id']
+            ), ARRAY_A);
+
+            /* A stored link if it is a web address; otherwise the courier's public tracking page where one is known. */
+            $link = trim((string) $delivery['tracking_link']);
+            if (!preg_match('#^https?://#i', $link)) {
+                $link = '';
+            }
+            if ($link === '' && $delivery['courier'] === 'steadfast' && $delivery['tracking_code'] !== '') {
+                $link = 'https://steadfast.com.bd/t/' . rawurlencode($delivery['tracking_code']);
+            }
+
+            $deliveries[] = array(
+                'courier'       => (string) $delivery['courier'],
+                'tracking_code' => (string) $delivery['tracking_code'],
+                'tracking_link' => $link,
+                'status'        => (string) $delivery['status'],
+                'datetime'      => (string) $delivery['datetime'],
+                'events'        => array_map(function ($event) {
+                    return array(
+                        'status'   => (string) $event['status'],
+                        'notes'    => (string) $event['notes'],
+                        'datetime' => (string) $event['datetime'],
+                    );
+                }, (array) $events),
+            );
+        }
+
+        /* Checkout saves the shipping method's id; the shopper knows it by name. */
+        $shipping_name = '';
+        if (ctype_digit((string) $order['shipping_method'])) {
+            $shipping_name = (string) $wpdb->get_var($wpdb->prepare(
+                "SELECT name FROM {$prefix}cstore_shipping_methods WHERE id = %d",
+                $order['shipping_method']
+            ));
+        }
+
+        die(wp_json_encode(array(
+            'status' => 'success',
+            'order'  => array(
+                'id'              => (int) $order['id'],
+                'status'          => (string) $order['status'],
+                'payment_status'  => (string) $order['payment_status'],
+                'payment_method'  => (string) $order['payment_method'],
+                'shipping_method' => $shipping_name !== '' ? $shipping_name : (string) $order['shipping_method'],
+                'total_amount'    => (float) $order['total_amount'],
+                'currency'        => (string) $order['currency'],
+                'created_at'      => (string) $order['created_at'],
+                'completed_at'    => (string) $order['completed_at'],
+            ),
+            'items'      => $items,
+            'deliveries' => $deliveries,
+        )));
+    }
+
+    /**
+     * The Fraud Checker extension's config (`fraudCheck` in the store
+     * settings), as an array keyed by check id. It may be stored as a JSON
+     * string, which WordPress round-trips nested values as.
+     *
+     * @return array
+     */
+    private function fraud_check_config()
+    {
+        $settings = get_option('combo_store_settings', []);
+        $config = is_array($settings) && isset($settings['fraudCheck']) ? $settings['fraudCheck'] : [];
+
+        if (is_string($config)) {
+            $config = json_decode($config, true);
+        }
+
+        return is_array($config) ? $config : [];
+    }
+
+    /**
+     * A list of two-letter country codes from the Fraud Checker config:
+     * uppercased, de-duplicated, anything that is not two letters dropped.
+     */
+    private function fraud_country_list($value)
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : preg_split('/[\s,]+/', $value);
+        }
+
+        $codes = [];
+
+        foreach ((array) $value as $code) {
+            $code = strtoupper(trim((string) $code));
+
+            if (preg_match('/^[A-Z]{2}$/', $code)) {
+                $codes[$code] = true;
+            }
+        }
+
+        return array_keys($codes);
+    }
+
+    /** Is one fraud check switched on? Stored as true, "1", "true" or "on". */
+    private function fraud_check_enabled($config, $id)
+    {
+        $value = isset($config[$id]['enabled']) ? $config[$id]['enabled'] : false;
+
+        return $value === true || in_array(strtolower((string) $value), ['1', 'true', 'on', 'yes'], true);
+    }
+
+    /**
+     * The signed-in user the request's token belongs to, or 0.
+     *
+     * Not the order's `userid`: that comes from the request body, so it
+     * proves nothing about who is placing the order.
+     */
+    private function request_user_id($request)
+    {
+        $token = $request->get_header('Authorization');
+
+        if (!$token) {
+            return 0;
+        }
+
+        try {
+            $decoded_token = JWT::decode(str_replace('Bearer ', '', $token), new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
+        } catch (Exception $e) {
+            return 0;
+        }
+
+        $user_id = intval($decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? 0);
+
+        return ($user_id && get_user_by('id', $user_id)) ? $user_id : 0;
+    }
+
+    /**
+     * A phone number reduced to its last 10 digits, so "+8801711000000",
+     * "8801711000000", "01711000000" and "01711-000000" are the same number.
+     * Shorter numbers keep every digit. "" when there are none.
+     */
+    private function normalize_order_phone($phone)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+
+        return strlen($digits) > 10 ? substr($digits, -10) : $digits;
+    }
+
+    /**
+     * How many orders a phone number has placed in the last hour.
+     *
+     * Matched on the billing or shipping phone after normalising both sides,
+     * since the same number is typed many ways. Orders that were never
+     * really placed - abandoned-checkout captures, drafts, trashed - and ones
+     * that failed or were cancelled are not counted, so a shopper retrying a
+     * failed payment is not locked out.
+     *
+     * The window uses the same clock create_order writes created_at with.
+     */
+    private function phone_orders_last_hour($phone)
+    {
+        $wanted = $this->normalize_order_phone($phone);
+
+        if ($wanted === '') {
+            return 0;
+        }
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'cstore_orders';
+
+        $now = get_date_from_gmt(current_time('mysql'), 'Y-m-d H:i:s');
+        $since = date('Y-m-d H:i:s', strtotime($now) - HOUR_IN_SECONDS);
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT billing_phone, shipping_phone FROM $table WHERE created_at >= %s AND status NOT IN ('incomplete', 'draft', 'trash', 'failed', 'canceled', 'cancelled')",
+            $since
+        ), ARRAY_A);
+
+        $count = 0;
+
+        foreach ((array) $rows as $row) {
+            if (
+                $this->normalize_order_phone($row['billing_phone']) === $wanted ||
+                $this->normalize_order_phone($row['shipping_phone']) === $wanted
+            ) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * The cart lines below their minimum order quantity.
+     *
+     * The MOQ is read from the database, never from the request: a
+     * variation's own MOQ when it has one, otherwise its product's - the rule
+     * the storefront cart uses (productMoq in store/useCounterStore.js). An
+     * unset or invalid MOQ is 1. Lines for the same product + variation (a
+     * one-time and a subscription line) are added together first, so this
+     * checks the total ordered of each item.
+     *
+     * @param array $cart_items The order's cartItems.
+     * @return array[] { product_id, variation_id, title, quantity, moq } per short line.
+     */
+    private function order_moq_errors($cart_items)
+    {
+        global $wpdb;
+
+        if (!is_array($cart_items) || empty($cart_items)) {
+            return [];
+        }
+
+        $products_table = $wpdb->prefix . 'cstore_products';
+        $variations_table = $wpdb->prefix . 'cstore_products_variations';
+
+        $lines = [];
+        foreach ($cart_items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $product_id = intval($item['product_id'] ?? ($item['id'] ?? 0));
+            $variation_id = intval($item['variation_id'] ?? 0);
+            if ($product_id <= 0) {
+                continue;
+            }
+            $key = $product_id . ':' . $variation_id;
+            if (!isset($lines[$key])) {
+                $lines[$key] = array(
+                    'product_id'   => $product_id,
+                    'variation_id' => $variation_id,
+                    'title'        => sanitize_text_field($item['title'] ?? ''),
+                    'quantity'     => 0,
+                );
+            }
+            $lines[$key]['quantity'] += max(0, intval($item['quantity'] ?? 0));
+        }
+
+        $errors = [];
+        foreach ($lines as $line) {
+            $moq = null;
+
+            if ($line['variation_id'] > 0) {
+                $variation_moq = $wpdb->get_var($wpdb->prepare(
+                    "SELECT moq FROM $variations_table WHERE id = %d AND product_id = %d",
+                    $line['variation_id'],
+                    $line['product_id']
+                ));
+                if ($variation_moq !== null && $variation_moq !== '') {
+                    $moq = intval($variation_moq);
+                }
+            }
+
+            if ($moq === null) {
+                $moq = intval($wpdb->get_var($wpdb->prepare(
+                    "SELECT moq FROM $products_table WHERE product_id = %d",
+                    $line['product_id']
+                )));
+            }
+
+            $moq = max(1, $moq);
+
+            if ($line['quantity'] < $moq) {
+                $errors[] = array(
+                    'product_id'   => $line['product_id'],
+                    'variation_id' => $line['variation_id'],
+                    'title'        => $line['title'] !== '' ? $line['title'] : get_the_title($line['product_id']),
+                    'quantity'     => $line['quantity'],
+                    'moq'          => $moq,
+                );
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
      * Return Posts
      *
      * @since 1.0.0
@@ -11120,6 +12496,114 @@ class ComboStoreRest
         // } else {
 
         // }
+
+        /*
+            Minimum order quantity. The storefront cart holds lines at their MOQ,
+            but this route is open, so it is checked here too: an order with a
+            line below its MOQ is refused before anything is written. Not
+            checked for "incomplete" orders (the checkout's abandoned-cart
+            capture, saved while the customer types) or for an administrator /
+            store manager, who may enter any quantity by hand.
+        */
+        $order_status = isset($body_arr['status']) ? sanitize_text_field($body_arr['status']) : 'pending';
+        $is_staff = (bool) array_intersect(['administrator', 'store_manager'], $this->request_user_roles($request));
+
+        if ($order_status !== 'incomplete' && !$is_staff) {
+            $moq_errors = $this->order_moq_errors(isset($body_arr['cartItems']) ? $body_arr['cartItems'] : []);
+
+            if (!empty($moq_errors)) {
+                $lines = array_map(function ($error) {
+                    return sprintf('%s: minimum %d (ordered %d)', $error['title'], $error['moq'], $error['quantity']);
+                }, $moq_errors);
+
+                die(wp_json_encode(array(
+                    'status'  => 'failed',
+                    'code'    => 'moq_not_met',
+                    'message' => 'Some items are below their minimum order quantity. ' . implode('; ', $lines) . '.',
+                    'items'   => $moq_errors,
+                )));
+            }
+        }
+
+        /*
+            Fraud Checker extension checks (Dashboard -> Store -> Fraud Checker).
+            Skipped for "incomplete" orders and for staff, like the MOQ check.
+        */
+        if ($order_status !== 'incomplete' && !$is_staff) {
+            $fraud_config = $this->fraud_check_config();
+
+            /*
+                Login required: the order needs a valid customer token, and is
+                placed as that customer - the body's `userid` is not trusted,
+                since anyone can write any id into it.
+            */
+            if ($this->fraud_check_enabled($fraud_config, 'loginRequired')) {
+                $token_user_id = $this->request_user_id($request);
+
+                if (!$token_user_id) {
+                    die(wp_json_encode(array(
+                        'status'  => 'failed',
+                        'code'    => 'login_required',
+                        'message' => 'Please sign in to place an order.',
+                    )));
+                }
+
+                $body_arr['userid'] = $token_user_id;
+            }
+
+            /*
+                Country filter: the country of the request placing the order
+                (ComboStoreGeoIp: Cloudflare's header, else IPinfo Lite). A
+                blocked country is refused; when an allowed list is set, any
+                other country is refused. When the country cannot be told (no
+                token, lookup failed, private address), `unknown` decides -
+                allow by default, so a lookup outage does not stop sales.
+            */
+            if ($this->fraud_check_enabled($fraud_config, 'countryFilter')) {
+                $country_rule = isset($fraud_config['countryFilter']) && is_array($fraud_config['countryFilter']) ? $fraud_config['countryFilter'] : [];
+                $allowed_countries = $this->fraud_country_list(isset($country_rule['allow_countries']) ? $country_rule['allow_countries'] : []);
+                $blocked_countries = $this->fraud_country_list(isset($country_rule['block_countries']) ? $country_rule['block_countries'] : []);
+
+                if ($allowed_countries || $blocked_countries) {
+                    $located = class_exists('ComboStore\Classes\ComboStoreGeoIp') ? ComboStoreGeoIp::request_country() : ['country' => ''];
+                    $order_country = $located['country'];
+
+                    if ($order_country === '') {
+                        $refuse = isset($country_rule['unknown']) && $country_rule['unknown'] === 'block';
+                    } else {
+                        $refuse = in_array($order_country, $blocked_countries, true)
+                            || ($allowed_countries && !in_array($order_country, $allowed_countries, true));
+                    }
+
+                    if ($refuse) {
+                        die(wp_json_encode(array(
+                            'status'  => 'failed',
+                            'code'    => 'country_blocked',
+                            'message' => 'Sorry, we can\'t accept orders from your location.',
+                            'country' => $order_country,
+                        )));
+                    }
+                }
+            }
+
+            /*
+                Phone limit: at most `order_count` orders per phone number per
+                hour. A limit of 0 or blank is treated as not set, rather than
+                as "no orders at all".
+            */
+            if ($this->fraud_check_enabled($fraud_config, 'limitPhone')) {
+                $phone_limit = isset($fraud_config['limitPhone']['order_count']) ? intval($fraud_config['limitPhone']['order_count']) : 0;
+                $order_phone = !empty($body_arr['billing_phone']) ? $body_arr['billing_phone'] : (isset($body_arr['shipping_phone']) ? $body_arr['shipping_phone'] : '');
+
+                if ($phone_limit > 0 && $this->normalize_order_phone($order_phone) !== '' && $this->phone_orders_last_hour($order_phone) >= $phone_limit) {
+                    die(wp_json_encode(array(
+                        'status'  => 'failed',
+                        'code'    => 'phone_limit',
+                        'message' => 'Too many orders from this phone number. Please try again later.',
+                    )));
+                }
+            }
+        }
 
         $order_response = $ComboStoreOrders->create_order($body_arr);
         $order_id = isset($order_response['order_id']) ? $order_response['order_id'] : 0;
@@ -11461,6 +12945,10 @@ class ComboStoreRest
      */
     public function create_shipping_zone($request)
     {
+        /* Staff only: a valid token alone let any signed-in customer rewrite shipping zones and prices. */
+        $denied = $this->shipping_staff_only($request);
+        if ($denied) return $denied;
+
         $token = $request->get_header('Authorization');
 
 
@@ -11539,6 +13027,10 @@ class ComboStoreRest
      */
     public function create_shipping_method($request)
     {
+        /* Staff only: a valid token alone let any signed-in customer rewrite shipping zones and prices. */
+        $denied = $this->shipping_staff_only($request);
+        if ($denied) return $denied;
+
         $token = $request->get_header('Authorization');
 
 
@@ -12230,35 +13722,68 @@ class ComboStoreRest
         $body    = $request->get_body();
         $body_arr = json_decode($body, true);
 
-
-
-        $user_agent = isset($headers['user_agent']) ? $headers['user_agent'] : [];
-        $authorization = $request->get_header('Authorization');
-
-        $courier = '';
-
-
-        if (isset($user_agent[0]) && $user_agent[0] == 'Steadfast-Webhook/1.0') {
-            $courier = 'steadfast';
-            $body_arr['authorization'] = $authorization;
+        if (!is_array($body_arr)) {
+            // Some couriers post form-encoded bodies.
+            $body_arr = $request->get_body_params();
+            $body_arr = is_array($body_arr) ? $body_arr : [];
         }
 
+        $query = $request->get_query_params();
+        $query = is_array($query) ? $query : [];
+
+        // First value of each header, keyed the WP way (lowercase, underscores).
+        $flat_headers = [];
+        foreach ($headers as $key => $values) {
+            $flat_headers[$key] = is_array($values) ? (string) reset($values) : (string) $values;
+        }
+
+        $user_agent = $flat_headers['user_agent'] ?? '';
+        $authorization = $request->get_header('Authorization');
+
+        // Which courier sent this: an explicit ?courier= or X-Combo-Courier wins,
+        // then each courier's own fingerprint.
+        $courier = sanitize_key($query['courier'] ?? ($flat_headers['x_combo_courier'] ?? ''));
+
+        if ($courier === '') {
+            if ($user_agent == 'Steadfast-Webhook/1.0') {
+                $courier = 'steadfast';
+            } elseif (!empty($flat_headers['x_pathao_signature'])) {
+                $courier = 'pathao';
+            } elseif (!empty($flat_headers['x_cb_webhook_signature'])) {
+                $courier = 'carrybee';
+            } elseif (isset($body_arr['tracking_number'], $body_arr['invoice_number'])) {
+                $courier = 'redx';
+            }
+        }
+
+        if ($courier === '' || !has_filter('couriers_webhook_' . $courier)) {
+            return new \WP_REST_Response([
+                'error'   => true,
+                'message' => 'Unknown courier. Add ?courier=<id> to the webhook URL.',
+            ], 400);
+        }
+
+        $body_arr['authorization'] = $authorization;
+        $body_arr['_webhook'] = [
+            'headers' => $flat_headers,
+            'query'   => $query,
+            'raw'     => $body,
+        ];
+
         $response = apply_filters('couriers_webhook_' . $courier, $body_arr);
+        $response = is_array($response) ? $response : [];
 
-        // Debug echo so the sender can confirm what actually arrived.
-        // Remove this before going live: it reflects auth headers back.
-        // $response = [
-        //     'received'      => true,
-        //     'header_count'  => count($headers),
-        //     'courier'       => $request->get_header('X-Combo-Courier'),
-        //     'content_type'  => $request->get_header('Content-Type'),
-        //     'authorization' => $request->get_header('Authorization'),
-        //     'headers'       => $headers,
-        //     'body'          => json_decode($body, true),
-        // ];
+        // Handlers may ask for a status code / headers (Pathao wants 202 + a header).
+        $http_status  = isset($response['_http_status']) ? (int) $response['_http_status'] : 200;
+        $http_headers = isset($response['_http_headers']) && is_array($response['_http_headers']) ? $response['_http_headers'] : [];
+        unset($response['_http_status'], $response['_http_headers']);
 
-        // return new \WP_REST_Response($response_, 200);
-        die(wp_json_encode($response));
+        $rest_response = new \WP_REST_Response($response, $http_status);
+        foreach ($http_headers as $name => $value) {
+            $rest_response->header($name, $value);
+        }
+
+        return $rest_response;
     }
 
 
@@ -12303,14 +13828,50 @@ class ComboStoreRest
 
 
         $body = $request->get_body();
+
+
         $body_arr = json_decode($body, true);
 
-
+        error_log($body);
 
 
         $response = [];
 
-        $status = update_option('combo_store_settings', $body_arr);
+        /*
+            Staff only. A valid token was all this used to ask for, so any
+            signed-in customer could rewrite the store settings - payment
+            gateways, couriers, or a 100%-off discount rule for everyone.
+        */
+        $roles = $this->request_user_roles($request);
+        if (!array_intersect($roles, ['administrator', 'store_manager'])) {
+            return new WP_Error('forbidden', 'You are not allowed to change the store settings.', array('status' => 403));
+        }
+
+        if (!is_array($body_arr)) {
+            $response['status'] = "failed";
+            $response['message'] = "Invalid settings data.";
+            die(wp_json_encode($response));
+        }
+
+        /*
+            Merge into what is stored rather than replacing it. Extension
+            screens post only the keys they own ({ fraudCheck: ... },
+            { discountRules, discountRuleOptions }), and saving that body as
+            the whole option wiped every other setting.
+
+            Top-level only: a posted key replaces its stored value whole, so
+            a rule or list item removed on its screen stays removed (a
+            recursive merge would bring it back). Keys not posted are kept.
+        */
+        $current = get_option('combo_store_settings', []);
+        if (!is_array($current)) {
+            $current = [];
+        }
+
+        $merged = array_replace($current, $body_arr);
+
+        /* update_option() returns false when nothing changed; that is still a successful save. */
+        $status = ($merged === $current) ? true : update_option('combo_store_settings', $merged);
 
 
 
@@ -12673,6 +14234,17 @@ class ComboStoreRest
         $ComboStoreOrders = new ComboStoreOrders();
 
 
+        /*
+            Staff only. Any valid token used to be enough to change any order -
+            its status, payment, totals - so a customer could edit anyone's.
+            The callers are dashboard screens (Orders, payments, quotes), all
+            opened by these roles; the same rule as bulk_update_orders.
+        */
+        $requester = $this->require_order_staff($request);
+        if (is_wp_error($requester)) {
+            return $requester;
+        }
+
         $_response = $ComboStoreOrders->update_order($body_arr);
 
 
@@ -12702,6 +14274,10 @@ class ComboStoreRest
      */
     public function update_shipping_method($request)
     {
+        /* Staff only: a valid token alone let any signed-in customer rewrite shipping zones and prices. */
+        $denied = $this->shipping_staff_only($request);
+        if ($denied) return $denied;
+
         $token = $request->get_header('Authorization');
 
 
@@ -12780,6 +14356,10 @@ class ComboStoreRest
      */
     public function update_shipping_zone($request)
     {
+        /* Staff only: a valid token alone let any signed-in customer rewrite shipping zones and prices. */
+        $denied = $this->shipping_staff_only($request);
+        if ($denied) return $denied;
+
         $token = $request->get_header('Authorization');
 
 
@@ -13284,6 +14864,17 @@ class ComboStoreRest
         $ComboStoreOrders = new ComboStoreOrders();
 
 
+        /*
+            Staff only. This route checked nothing (its token check was
+            commented out), so anyone could replace any order's items without
+            signing in. Its callers - order create / edit and the quote screen -
+            are dashboard screens that send the staff token.
+        */
+        $requester = $this->require_order_staff($request);
+        if (is_wp_error($requester)) {
+            return $requester;
+        }
+
         $_response = $ComboStoreOrders->update_order_items($body_arr);
 
 
@@ -13679,6 +15270,18 @@ class ComboStoreRest
             return new WP_Error('forbidden', 'You cannot view this subscription', array('status' => 403));
         }
 
+        /* By order: an order can now hold several (one per subscribed product).
+           `subscription` stays the first, for older callers. */
+        if ($by === 'order_id') {
+            $listing = $ComboStoreSubscriptions->get_order_subscriptions(absint($id));
+            if (!$isStaff) {
+                $listing['subscriptions'] = array_values(array_filter($listing['subscriptions'], function ($row) use ($user_id) {
+                    return absint($row['userid']) === absint($user_id);
+                }));
+            }
+            $response = array_merge($response, $listing);
+        }
+
         die(wp_json_encode($response));
     }
 
@@ -14026,6 +15629,7 @@ class ComboStoreRest
 
         $response = [];
 
+        error_log($body);
 
 
         $ComboStoreActivitiy = new ComboStoreActivitiy();
@@ -14357,6 +15961,19 @@ class ComboStoreRest
             ARRAY_A
         );
 
+        /*
+            Store staff and riders read any order, as before. Anyone else -
+            a customer - only their own, and without the store's cost and
+            profit. This returned any order to any signed-in user: names,
+            phones, addresses and margins included.
+        */
+        $order_staff = !empty(array_intersect((array) $userRoles, ['administrator', 'store_manager', 'support_agent']));
+        $order_full_access = $order_staff || in_array('rider', (array) $userRoles, true);
+
+        if ($orderRow && !$order_full_access && absint($orderRow['userid']) !== absint($user->ID)) {
+            return new WP_Error('forbidden', 'You cannot view this order', array('status' => 403));
+        }
+
         $ComboStoreObjectMeta = new ComboStoreObjectMeta();
 
         $delivery_location = $ComboStoreObjectMeta->get_meta('orders', $order_id, "delivery_location");
@@ -14427,6 +16044,12 @@ class ComboStoreRest
         $response['coupons'] = json_decode($coupons);
         $response['subscription'] = $subscriptionRow;
         $response['delivery'] = $deliveryRow;
+
+        if (!$order_staff) {
+            $ComboStoreOrdersPrivacy = new ComboStoreOrders();
+            $response['order'] = $ComboStoreOrdersPrivacy->strip_private_order_fields($response['order']);
+            $response = $ComboStoreOrdersPrivacy->strip_private_order_fields($response);
+        }
 
 
         die(wp_json_encode($response));
@@ -15525,6 +17148,66 @@ class ComboStoreRest
      * @since 1.0.0
      * @param WP_REST_Request $request Post data.
      */
+    /**
+     * Permission for server-to-server routes: the X-API-KEY header must be
+     * the store's API token (settings apiKeys.apiToken), as get_settings_public
+     * checks it.
+     */
+    public function api_key_permission($request)
+    {
+        $api_key = (string) $request->get_header('x-api-key');
+        if ($api_key === '') {
+            return new WP_Error('no_api_key', 'API key missing', ['status' => 401]);
+        }
+        $settings = get_option('combo_store_settings');
+        $apiToken = (string) ($settings['apiKeys']['apiToken']['key'] ?? '');
+        if ($apiToken === '' || !hash_equals($apiToken, $api_key)) {
+            return new WP_Error('invalid_api_key', 'Invalid API key', ['status' => 403]);
+        }
+        return true;
+    }
+
+    /**
+     * Record a payment a gateway has verified: the order becomes paid and
+     * processing, with the gateway's transaction id. Only these fields
+     * change. An order already paid is left alone (the callback and the
+     * webhook race; the second one lands here).
+     *
+     * order_id, payment_method (a known gateway), transaction_id.
+     */
+    public function record_gateway_payment($request)
+    {
+        $order_id = isset($request['order_id']) ? absint($request['order_id']) : 0;
+        $method = isset($request['payment_method']) ? sanitize_key($request['payment_method']) : '';
+        $transaction_id = isset($request['transaction_id']) ? sanitize_text_field((string) $request['transaction_id']) : '';
+
+        if (!in_array($method, ['stripe', 'paddle', 'eps', 'aamarpay', 'bkash', 'nagad'], true)) {
+            return new WP_Error('invalid_method', 'Unknown payment gateway', ['status' => 400]);
+        }
+
+        global $wpdb;
+        $row = $order_id ? $wpdb->get_row($wpdb->prepare("SELECT id, payment_status FROM {$wpdb->prefix}cstore_orders WHERE id = %d", $order_id), ARRAY_A) : null;
+        if (!$row) {
+            return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+        }
+        if (strtolower((string) $row['payment_status']) === 'paid') {
+            return ['status' => 'success', 'already_paid' => true];
+        }
+
+        $ComboStoreOrders = new ComboStoreOrders();
+        $result = $ComboStoreOrders->update_order([
+            'id'             => $order_id,
+            'status'         => 'processing',
+            'payment_method' => $method,
+            'payment_status' => 'paid',
+            'transaction_id' => $transaction_id,
+        ]);
+
+        if (empty($result['success'])) {
+            return ['status' => 'failed', 'message' => $result['message'] ?? 'The payment could not be recorded.'];
+        }
+        return ['status' => 'success'];
+    }
     public function get_order_by_hash($request)
     {
 
@@ -15657,6 +17340,12 @@ class ComboStoreRest
         $response['subscription'] = $subscriptionRow;
         $response['delivery'] = $deliveryRow;
 
+        /* Whoever holds the thank-you link - often a guest - sees the order,
+           never the store's cost and profit on it. */
+        $ComboStoreOrdersPrivacy = new ComboStoreOrders();
+        $response['order'] = $ComboStoreOrdersPrivacy->strip_private_order_fields($response['order']);
+        $response = $ComboStoreOrdersPrivacy->strip_private_order_fields($response);
+
 
         die(wp_json_encode($response));
     }
@@ -15733,97 +17422,227 @@ class ComboStoreRest
     }
 
     /**
-     * Return Posts
+     * Resolve the signed-in user for the license endpoints.
      *
-     * @since 1.0.0
-     * @param WP_REST_Request $request Post data.
+     * @return array|WP_Error ['user' => WP_User, 'is_staff' => bool]
      */
-    public function get_licenses($request)
+    private function license_request_user($request)
     {
-
-
         $token = $request->get_header('Authorization');
-
-
         if (!$token) {
             return new WP_Error('missing_token', 'Authorization token is required', array('status' => 401));
         }
-
-        // Remove "Bearer " prefix if present
         $token = str_replace('Bearer ', '', $token);
-
-        // Decode the token
         try {
             $decoded_token = JWT::decode($token, new Key(JWT_AUTH_SECRET_KEY, 'HS256'));
         } catch (Exception $e) {
             return new WP_Error('invalid_token', 'Invalid or expired token', array('status' => 401));
         }
-
-
-        // Get user by ID
-        // $user = get_user_by('id', $decoded_token->sub);
-
-
-
         $user_id = $decoded_token->sub ?? $decoded_token->user_id ?? $decoded_token->data->user->id ?? null;
-
-        if (!$user_id) {
-            return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
-        }
-
-
-        $user = get_user_by('id', $user_id);
-
-
+        $user = $user_id ? get_user_by('id', $user_id) : null;
         if (!$user) {
-            return new WP_Error('user_not_found', 'User not found', array('status' => 404));
+            return new WP_Error('invalid_token', 'User not found', array('status' => 401));
+        }
+        $roles = (array) $user->roles;
+
+        return [
+            'user'     => $user,
+            'is_staff' => in_array('administrator', $roles, true) || in_array('store_manager', $roles, true),
+        ];
+    }
+
+
+    /**
+     * List licenses. Staff see every license; anyone else only their own.
+     *
+     * This used to build its SQL by pasting user_id, offset and order into the
+     * query string, and returned the raw rows with JSON columns as strings.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_licenses($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+
+        $status = isset($request['status']) ? sanitize_key($request['status']) : '';
+
+        $ComboStoreLicenses = new ComboStoreLicenses();
+
+        $response = $ComboStoreLicenses->get_licenses([
+            'isAdmin'      => $auth['is_staff'],
+            'user_id'      => $auth['user']->ID,
+            'paged'        => isset($request['paged']) ? max(1, absint($request['paged'])) : 1,
+            'per_page'     => isset($request['per_page']) ? min(max(absint($request['per_page']), 1), 100) : 10,
+            'order'        => isset($request['order']) ? $request['order'] : 'DESC',
+            'status'       => in_array($status, ComboStoreLicenses::STATUSES, true) ? $status : '',
+            'keyword'      => isset($request['keyword']) ? trim((string) $request['keyword']) : '',
+            'product_id'   => isset($request['product_id']) ? $request['product_id'] : 0,
+            'variation_id' => isset($request['variation_id']) ? $request['variation_id'] : 0,
+            'order_id'     => isset($request['order_id']) ? $request['order_id'] : 0,
+            'order_ids'    => isset($request['order_ids']) ? (array) $request['order_ids'] : [],
+            'customer'     => isset($request['customer']) ? $request['customer'] : [],
+            'expired'      => isset($request['expired']) ? $request['expired'] : null,
+            'from_date'    => isset($request['from_date']) ? $request['from_date'] : '',
+            'to_date'      => isset($request['to_date']) ? $request['to_date'] : '',
+        ]);
+
+        die(wp_json_encode($response));
+    }
+
+
+    /**
+     * One license by `id` (or by `license_key`). Customers can only read their own.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function get_license($request)
+    {
+        // $auth = $this->license_request_user($request);
+        // if (is_wp_error($auth)) return $auth;
+
+        $body_arr = json_decode($request->get_body(), true);
+        $body_arr = is_array($body_arr) ? $body_arr : [];
+
+        $ComboStoreLicenses = new ComboStoreLicenses();
+
+        if (!empty($body_arr['license_key'])) {
+            $license = $ComboStoreLicenses->get_license_by_key($body_arr['license_key']);
+        } else {
+            $license = $ComboStoreLicenses->get_license(isset($body_arr['id']) ? absint($body_arr['id']) : 0)['license'];
         }
 
+        // if ($license && !$auth['is_staff'] && (int) $license->userid !== (int) $auth['user']->ID) {
+        //     return new WP_Error('forbidden', 'You cannot view this license', array('status' => 403));
+        // }
+
+        $response = ['license' => $license];
+
+        if ($license && $license->order_id) {
+            global $wpdb;
+            $table_orders = $wpdb->prefix . 'cstore_orders';
+            $response['order'] = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, status, payment_status, payment_method, total_amount, billing_name, billing_email, billing_phone, created_at FROM $table_orders WHERE id = %d",
+                $license->order_id
+            ));
+        }
+
+        die(wp_json_encode($response));
+    }
 
 
-        $userRoles = isset($user->roles) ? $user->roles : [];
-        $isAdmin = in_array('administrator', $userRoles) ? true : false;
+    /**
+     * Issue a license by hand. Staff only.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function create_license($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+        if (!$auth['is_staff']) {
+            return new WP_Error('forbidden', 'Only store staff can create licenses', array('status' => 403));
+        }
 
+        $body_arr = json_decode($request->get_body(), true);
+        $body_arr = is_array($body_arr) ? $body_arr : [];
 
+        if (isset($body_arr['status']) && !in_array($body_arr['status'], ComboStoreLicenses::STATUSES, true)) {
+            unset($body_arr['status']);
+        }
 
-        $object     = isset($request['object']) ? sanitize_email($request['object']) : '';
-        $page     = isset($request['paged']) ? absint($request['paged']) : 1;
-        $per_page     = isset($request['per_page']) ? absint($request['per_page']) : 10;
-        $order     = isset($request['order']) ? absint($request['order']) : "DESC";
+        if (empty($body_arr['userid']) && empty($body_arr['user_id']) && !empty($body_arr['user_email'])) {
+            $owner = get_user_by('email', sanitize_email($body_arr['user_email']));
+            if ($owner) $body_arr['userid'] = $owner->ID;
+        }
 
-
-        global $wpdb;
-
-        $prefix = $wpdb->prefix;
-
-        $table_licenses = $prefix . 'cstore_licenses';
-        $table_orders = $prefix . 'cstore_orders';
+        $ComboStoreLicenses = new ComboStoreLicenses();
+        $_response = $ComboStoreLicenses->create_license($body_arr);
 
         $response = [];
-        $offset = ($page - 1) * $per_page;
-
-        $last_day = gmdate("Y-m-d");
-        $first_date = gmdate("Y-m-d", strtotime("7 days ago"));
-
-
-        if ($isAdmin) {
-
-            $entries = $wpdb->get_results("SELECT * FROM $table_licenses ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_licenses");
+        if (!empty($_response['success'])) {
+            $response['status'] = "success";
+            $response['message'] = "License created.";
+            $response['id'] = $_response['id'];
+            $response['license_key'] = $_response['license_key'];
         } else {
-
-            $entries = $wpdb->get_results("SELECT * FROM $table_licenses WHERE userid='$user_id' ORDER BY id $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_licenses WHERE userid='$user_id'");
+            $response['status'] = "failed";
+            $response['message'] = !empty($_response['message']) ? $_response['message'] : "There is an error.";
         }
 
+        die(wp_json_encode($response));
+    }
 
 
-        $max_pages = ceil($total / $per_page);
-        $response['total'] = $total;
-        $response['max_pages'] = $max_pages;
+    /**
+     * Partial update of a license. Staff only.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function update_license($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+        if (!$auth['is_staff']) {
+            return new WP_Error('forbidden', 'Only store staff can update licenses', array('status' => 403));
+        }
 
-        $response['posts'] = $entries;
+        $body_arr = json_decode($request->get_body(), true);
+        $body_arr = is_array($body_arr) ? $body_arr : [];
 
+        if (isset($body_arr['status']) && !in_array($body_arr['status'], ComboStoreLicenses::STATUSES, true)) {
+            unset($body_arr['status']);
+        }
+
+        $ComboStoreLicenses = new ComboStoreLicenses();
+
+        $response = [];
+        if (empty($body_arr['id']) || empty($ComboStoreLicenses->get_license(absint($body_arr['id']))['license'])) {
+            $response['status'] = "failed";
+            $response['message'] = "License not found.";
+        } elseif ($ComboStoreLicenses->update_license($body_arr)) {
+            $response['status'] = "success";
+            $response['message'] = "License updated.";
+        } else {
+            $response['status'] = "failed";
+            $response['message'] = "There is an error. The license key may already be in use.";
+        }
+
+        die(wp_json_encode($response));
+    }
+
+
+    /**
+     * Delete one license (`id`) or several (`ids`), with their meta. Staff only.
+     *
+     * @param WP_REST_Request $request Post data.
+     */
+    public function delete_licenses($request)
+    {
+        $auth = $this->license_request_user($request);
+        if (is_wp_error($auth)) return $auth;
+        if (!$auth['is_staff']) {
+            return new WP_Error('forbidden', 'Only store staff can delete licenses', array('status' => 403));
+        }
+
+        $body_arr = json_decode($request->get_body(), true);
+        $body_arr = is_array($body_arr) ? $body_arr : [];
+
+        $ids = isset($body_arr['ids']) ? (array) $body_arr['ids'] : (isset($body_arr['id']) ? [$body_arr['id']] : []);
+        $ids = array_filter(array_map('absint', $ids));
+
+        $ComboStoreLicenses = new ComboStoreLicenses();
+
+        $deleted = [];
+        foreach ($ids as $id) {
+            if ($ComboStoreLicenses->delete_license($id)) $deleted[] = $id;
+        }
+
+        $response = [];
+        $response['status'] = !empty($deleted) ? "success" : "failed";
+        $response['message'] = !empty($deleted) ? count($deleted) . " license(s) deleted." : "There is an error.";
+        $response['deleted'] = $deleted;
+        $response['failed'] = array_values(array_diff($ids, $deleted));
 
         die(wp_json_encode($response));
     }
@@ -15946,8 +17765,19 @@ class ComboStoreRest
         $phones              = get_user_meta($user_id,  "phones", true);
         $kids              = get_user_meta($user_id,  "kids", true);
 
+        /*
+            Orders this customer has actually placed, for cart rules such as
+            "first order" (Discount Rules' "Customer's past orders"). Orders
+            that never went through - abandoned checkouts, drafts, failed,
+            cancelled, refunded or trashed - do not count.
+        */
+        global $wpdb;
+        $orders_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}cstore_orders WHERE userid = %d AND status NOT IN ('incomplete', 'draft', 'failed', 'canceled', 'cancelled', 'refunded', 'trash')",
+            $user->ID
+        ));
 
-        error_log(wp_json_encode($addresses));
+
 
         // Return user details
         return rest_ensure_response(array(
@@ -15973,6 +17803,7 @@ class ComboStoreRest
                 'addresses'  => $addresses,
                 'phones'  => $phones,
                 'kids'  => $kids,
+                'orders_count'  => $orders_count,
 
             ),
         ));
@@ -16103,6 +17934,20 @@ class ComboStoreRest
 
         if (!$user_id) {
             return new WP_Error('invalid_token', 'User ID not found in token', array('status' => 401));
+        }
+
+        /*
+            Staff only. It used to take any valid token, so a signed-in
+            customer could spend the store's paid BD Courier quota and read
+            any phone number's delivery history. Only the dashboard's order
+            screens (Orders, Incomplete, Refunds, Shipping Zones) call it.
+        */
+        $user = $this->get_ticket_user($request);
+        if (is_wp_error($user)) {
+            return $user;
+        }
+        if (!$this->is_ticket_staff($user)) {
+            return new WP_Error('forbidden', 'You are not allowed to run phone checks.', array('status' => 403));
         }
 
         $phone     = isset($request['phone']) ? sanitize_text_field($request['phone']) : '';
@@ -16670,7 +18515,6 @@ class ComboStoreRest
 
         );
 
-        error_log(wp_json_encode($response));;
 
         die(wp_json_encode($response));
     }
@@ -17074,7 +18918,6 @@ class ComboStoreRest
 
 
 
-                error_log(wp_json_encode($addresses));
 
                 $posts[] = $user_data;
             endforeach;
@@ -17452,6 +19295,10 @@ class ComboStoreRest
      */
     public function delete_shipping_zones($request)
     {
+        /* Staff only: a valid token alone let any signed-in customer rewrite shipping zones and prices. */
+        $denied = $this->shipping_staff_only($request);
+        if ($denied) return $denied;
+
         $token = $request->get_header('Authorization');
 
 
@@ -18503,6 +20350,28 @@ class ComboStoreRest
      * @param WP_User $user The user.
      * @return bool
      */
+    /**
+     * The signed-in staff member (is_ticket_staff: administrator, store
+     * manager, shop manager, support agent) for the order-changing routes.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_User|WP_Error 401 without a valid token, 403 for any other role.
+     */
+    private function require_order_staff($request)
+    {
+        $user = $this->get_ticket_user($request);
+
+        if (is_wp_error($user)) {
+            return $user;
+        }
+
+        if (!$this->is_ticket_staff($user)) {
+            return new WP_Error('forbidden', 'You are not allowed to update orders', array('status' => 403));
+        }
+
+        return $user;
+    }
+
     private function is_ticket_staff($user)
     {
         $staff_roles = ['administrator', 'support_agent', 'shop_manager', 'store_manager'];
@@ -19850,8 +21719,9 @@ class ComboStoreRest
 
 
 
-                if (!empty($body_arr['featured'])) {
-                    update_post_meta($post_id, 'featured', $featured);
+                /* Only when the bulk form touched the star; false now un-features. */
+                if (is_array($body_arr) && array_key_exists('featured', $body_arr)) {
+                    $this->save_product_featured($post_id, $body_arr['featured']);
                 }
             }
         }

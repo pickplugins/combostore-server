@@ -3,7 +3,7 @@
 Plugin Name: Combo Store - Server
 Plugin URI: http://pickplugins.com/items/woocommerce-product-slider-for-wordpress/
 Description: combo-store
-Version: 1.0.6
+Version: 1.0.5
 Author: PickPlugins
 Text Domain: combostore-server
 Author URI: http://pickplugins.com
@@ -18,7 +18,7 @@ define('combo_store_plugin_url', plugins_url('/', __FILE__));
 define('combo_store_plugin_dir', plugin_dir_path(__FILE__));
 define('combo_store_plugin_file', __FILE__);
 define('combo_store_plugin_name', 'Combo Store');
-define('combo_store_plugin_version', '1.0.6');
+define('combo_store_plugin_version', '1.0.5');
 // define('JWT_AUTH_SECRET_KEY', '');
 
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
@@ -30,6 +30,7 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 use ComboStore\Classes\ComboStoreCore;
 use ComboStore\Classes\SteadfastCourier;
 use ComboStore\Classes\ComboStoreRest;
+use ComboStore\Classes\ComboStoreAffiliates;
 use ComboStore\Classes\ComboRequestLemonsqueezy;
 use ComboStore\Classes\ComboStoreCrons;
 use ComboStore\Classes\ComboStoreDatabase;
@@ -48,6 +49,71 @@ if (class_exists('ComboStore\Classes\ComboStoreRest')) {
     new ComboStoreRest();
 }
 
+/* Affiliate sales, clicks and payouts routes (combo-store/v2/*affiliate*). */
+if (class_exists('ComboStore\Classes\ComboStoreAffiliates')) {
+    new ComboStoreAffiliates();
+}
+
+/* Rider-only figures and details for the dashboard (combo-store/v2/*rider*). */
+if (class_exists('ComboStore\Classes\ComboStoreRiders')) {
+    new ComboStore\Classes\ComboStoreRiders();
+}
+
+/* Supplier-only figures and details for the dashboard (combo-store/v2/*supplier*). */
+if (class_exists('ComboStore\Classes\ComboStoreSuppliers')) {
+    new ComboStore\Classes\ComboStoreSuppliers();
+}
+
+/* Support-agent figures and details, and ticket assignment (combo-store/v2/*support_agent*, assign_ticket). */
+if (class_exists('ComboStore\Classes\ComboStoreSupportAgents')) {
+    new ComboStore\Classes\ComboStoreSupportAgents();
+}
+
+/* Store-manager figures and details, and order assignment (combo-store/v2/*store_manager*, assign_order). */
+if (class_exists('ComboStore\Classes\ComboStoreStoreManagers')) {
+    new ComboStore\Classes\ComboStoreStoreManagers();
+}
+
+/* Product deals and their waitlists (combo-store/v2/*deal_waitlist*). */
+if (class_exists('ComboStore\Classes\ComboStoreDeals')) {
+    new ComboStore\Classes\ComboStoreDeals();
+}
+
+/* Shipping classes and their per-method rates (combo-store/v2/*shipping_class*). */
+if (class_exists('ComboStore\Classes\ComboStoreShippingClasses')) {
+    new ComboStore\Classes\ComboStoreShippingClasses();
+}
+
+/* Email and SMS marketing: contacts, lists, campaigns, send queue (combo-store/v2/*mkt*). */
+if (class_exists('ComboStore\Classes\ComboStoreMarketing')) {
+    new ComboStore\Classes\ComboStoreMarketing();
+}
+
+/* Voice: cloud PBX / IVR (Talkify first) - click-to-call, voice campaigns, order confirmation calls (combo-store/v2/*voice*). */
+if (class_exists('ComboStore\Classes\ComboStoreVoice')) {
+    new ComboStore\Classes\ComboStoreVoice();
+}
+
+/* Facebook / Instagram ad campaigns (Meta Marketing API): list with results, turn on/off (combo-store/v2/*fb_ads*, set_fb_campaign_status). */
+if (class_exists('ComboStore\Classes\ComboStoreFacebookAds')) {
+    new ComboStore\Classes\ComboStoreFacebookAds();
+}
+
+/* Messages: one inbox for WhatsApp and Facebook Messenger conversations (combo-store/v2/*inbox*). */
+if (class_exists('ComboStore\Classes\ComboStoreInbox')) {
+    new ComboStore\Classes\ComboStoreInbox();
+}
+
+/* IP -> country for the Fraud Checker's country filter: Cloudflare header, else IPinfo Lite (combo-store/v2/*geoip*). */
+if (class_exists('ComboStore\Classes\ComboStoreGeoIp')) {
+    new ComboStore\Classes\ComboStoreGeoIp();
+}
+
+/* A password change ends that user's existing sign-ins (JWT and cookie). */
+if (class_exists('ComboStore\Classes\ComboStoreTokenRevocation')) {
+    new ComboStore\Classes\ComboStoreTokenRevocation();
+}
+
 if (class_exists('ComboStore\Classes\ComboRequestLemonsqueezy')) {
     new ComboRequestLemonsqueezy();
 }
@@ -60,6 +126,15 @@ if (class_exists('ComboStore\Classes\ComboStorePostTypes')) {
 if (class_exists('ComboStore\Classes\SteadfastCourier')) {
     new SteadfastCourier();
 }
+
+/* Couriers: each class registers its cstore_send_to_courier_<id> filter. */
+foreach (['PathaoCourier', 'RedxCourier', 'Courrierfast', 'CarrybeeCourier', 'PaperflyCourier'] as $combo_store_courier_class) {
+    $combo_store_courier_class = 'ComboStore\\Classes\\' . $combo_store_courier_class;
+    if (class_exists($combo_store_courier_class)) {
+        new $combo_store_courier_class();
+    }
+}
+unset($combo_store_courier_class);
 
 
 register_activation_hook(__FILE__, 'combo_store_activation');
@@ -75,6 +150,7 @@ require_once(combo_store_plugin_dir . 'includes/functions-purchase.php');
 require_once(combo_store_plugin_dir . 'includes/functions-roles.php');
 require_once(combo_store_plugin_dir . 'includes/functions-comments.php');
 require_once(combo_store_plugin_dir . 'includes/functions-email-subscribe.php');
+require_once(combo_store_plugin_dir . 'includes/functions-licenses.php');
 
 
 
@@ -113,7 +189,7 @@ function combo_store_activation()
     // }
 
     if (!wp_next_scheduled('cstore_process_scheduled_orders')) {
-        wp_schedule_event(time(), 'hourly', 'cstore_process_scheduled_orders');
+        //wp_schedule_event(time(), 'hourly', 'cstore_process_scheduled_orders');
     }
     // if (!wp_next_scheduled('run_update_product_description')) {
     //     wp_schedule_event(time(), '30minute', 'run_update_product_description');

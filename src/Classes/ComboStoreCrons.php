@@ -23,10 +23,26 @@ class ComboStoreCrons
         add_action('run_total_counts', [$this, 'run_total_counts']);
 
         add_action('cstore_process_scheduled_orders', [$this, 'cstore_process_scheduled_orders']);
+
+        /* Subscription renewals: once a day, a pending renewal order for every
+           product subscription whose billing date has come. */
+        add_action('cstore_subscription_renewals', [$this, 'cstore_subscription_renewals']);
+        add_action('init', function () {
+            if (!wp_next_scheduled('cstore_subscription_renewals')) {
+                wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', 'cstore_subscription_renewals');
+            }
+        });
         // add_action('run_update_product_description', [$this, 'run_update_product_description_gemini']);
         // add_action('run_update_blog_description', [$this, 'run_update_blog_description_gemini']);
         // add_action('run_update_blog_slug', [$this, 'run_update_blog_slug']);
     }
+
+    function cstore_subscription_renewals()
+    {
+        $ComboStoreSubscriptions = new ComboStoreSubscriptions();
+        return $ComboStoreSubscriptions->process_due_renewals();
+    }
+
 
     /**
      * Process scheduled orders.

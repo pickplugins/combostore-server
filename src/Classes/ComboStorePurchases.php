@@ -226,7 +226,10 @@ class ComboStorePurchases
 
         /* Purchases have a supplier, not a customer: the list filters by supplier_id
            (sent as supplier_id, or as the old customer.id). */
-        $supplier_id = isset($prams['supplier_id']) ? absint($prams['supplier_id']) : absint($customer_id);
+        $supplier_id = isset($prams['supplier_id']) ? $prams['supplier_id'] : $customer_id;
+        /* "none" = purchases with no supplier; otherwise a user id (0 = any). */
+        $supplier_none = ($supplier_id === 'none');
+        $supplier_id = $supplier_none ? 0 : absint($supplier_id);
 
 
         $from_date = isset($prams['from_date']) ? sanitize_text_field($prams['from_date']) : '';
@@ -272,13 +275,6 @@ class ComboStorePurchases
                 $params[] = $payment_status;
             }
 
-            /* "userid = %s" named a column cstore_purchases does not have, so this
-               filter failed with a SQL error and the list came back empty. */
-            if (!empty($supplier_id)) {
-                $where[]  = "supplier_id = %d";
-                $params[] = $supplier_id;
-            }
-
             if ($from_date && $to_date) {
                 $where[]  = "created_at BETWEEN %s AND %s";
                 $params[] = $from_date . " 00:00:00";
@@ -286,15 +282,74 @@ class ComboStorePurchases
             }
 
 
+            /* The supplier and product filters, kept apart so each dropdown's counts
+               can apply every filter but its own. */
+            $supplier_where = [];
+            $supplier_params = [];
+            /* "userid = %s" named a column cstore_purchases does not have, so this
+               filter failed with a SQL error and the list came back empty. */
+            if ($supplier_none) {
+                $supplier_where[] = "(supplier_id IS NULL OR supplier_id = 0)";
+            } elseif (!empty($supplier_id)) {
+                $supplier_where[]  = "supplier_id = %d";
+                $supplier_params[] = $supplier_id;
+            }
+
+            $product_where = [];
+            $product_params = [];
+            $product_id = absint($product_id);
             if (!empty($product_id)) {
-                $where[] = "EXISTS (
+                $product_where[] = "EXISTS (
                     SELECT 1 FROM {$table_purchases_items} oi
                     WHERE oi.purchase_id = {$table_purchases}.id
                     AND oi.product_id = %d
                 )";
-
-                $params[] = $product_id;
+                $product_params[] = $product_id;
             }
+
+            $run = function ($sql, $params) use ($wpdb) {
+                return (array) $wpdb->get_results(!empty($params) ? $wpdb->prepare($sql, $params) : $sql);
+            };
+            $where_of = function ($parts) {
+                return !empty($parts) ? "WHERE " . implode(' AND ', $parts) : '';
+            };
+
+            /* Products bought under every other filter, for the product dropdown:
+               [{id, name, count}] by purchases, most bought first. */
+            $p_where  = $where_of(array_merge($where, $supplier_where));
+            $p_params = array_merge($params, $supplier_params);
+            $product_options = [];
+            foreach ($run(
+                "SELECT i.product_id id, MAX(i.product_name) name, COUNT(DISTINCT i.purchase_id) n
+                 FROM {$table_purchases_items} i
+                 WHERE i.product_id > 0 AND i.purchase_id IN (SELECT id FROM $table_purchases $p_where)
+                 GROUP BY i.product_id ORDER BY n DESC, name ASC LIMIT 300",
+                $p_params
+            ) as $row) {
+                $product_options[] = ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) $row->n];
+            }
+            $responses['product_options'] = $product_options;
+
+            /* Purchases per supplier under every other filter, for the supplier
+               dropdown's counts ("0" = no supplier). */
+            $count_where  = $where_of(array_merge($where, $product_where));
+            $count_params = array_merge($params, $product_params);
+            $count_sql   = "SELECT COALESCE(supplier_id, 0) sid, COUNT(*) n, MAX(NULLIF(billing_name, '')) name FROM $table_purchases $count_where GROUP BY COALESCE(supplier_id, 0)";
+            $supplier_counts = [];
+            $supplier_names  = [];
+            foreach ($run($count_sql, $count_params) as $row) {
+                $sid = (string) (int) $row->sid;
+                $supplier_counts[$sid] = (int) $row->n;
+                /* The name written on the purchases, for ids that are no longer a supplier account. */
+                if ($sid !== '0' && $row->name !== null && !get_user_by('id', (int) $sid)) {
+                    $supplier_names[$sid] = $row->name;
+                }
+            }
+            $responses['supplier_counts'] = $supplier_counts ?: new \stdClass();
+            $responses['supplier_names']  = $supplier_names ?: new \stdClass();
+
+            $where  = array_merge($where, $supplier_where, $product_where);
+            $params = array_merge($params, $supplier_params, $product_params);
 
             $where_sql = '';
 

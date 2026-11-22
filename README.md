@@ -3,8 +3,8 @@
 	Donate link: https://www.pickplugins.com/
 	Tags: eCommerce 
 	Requires at least: 3.8
-	Tested up to: 6.7
-	Stable tag: 1.0.0
+	Tested up to: 7.1
+	Stable tag: 1.0.6
 	License: GPLv2 or later
 	License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -480,16 +480,16 @@ any route; `paypal_get_settings` reports only whether one is stored.
 
 ### Routes
 
-| Route | Auth | Purpose |
-|---|---|---|
-| `paypal_config` | open | What the browser may know: enabled, mode, client id, currency, SDK URL |
-| `paypal_create_order` | open | `{ order_hash }` → starts a PayPal order for an existing order |
-| `paypal_capture_order` | open | `{ paypal_order_id, order_hash? }` → captures and marks the order paid |
-| `paypal_webhook` | signature | PayPal's events; verified through PayPal, returns real status codes so failures are retried |
-| `paypal_get_settings` | JWT | Settings, secret masked |
-| `paypal_update_settings` | JWT | Save settings; omit `client_secret` to keep the stored one |
-| `paypal_test_connection` | JWT | Prove the credentials authenticate |
-| `paypal_refund` | JWT | `{ order_id, amount?, reason? }` → refund a capture |
+| Route                    | Auth      | Purpose                                                                                     |
+| ------------------------ | --------- | ------------------------------------------------------------------------------------------- |
+| `paypal_config`          | open      | What the browser may know: enabled, mode, client id, currency, SDK URL                      |
+| `paypal_create_order`    | open      | `{ order_hash }` → starts a PayPal order for an existing order                              |
+| `paypal_capture_order`   | open      | `{ paypal_order_id, order_hash? }` → captures and marks the order paid                      |
+| `paypal_webhook`         | signature | PayPal's events; verified through PayPal, returns real status codes so failures are retried |
+| `paypal_get_settings`    | JWT       | Settings, secret masked                                                                     |
+| `paypal_update_settings` | JWT       | Save settings; omit `client_secret` to keep the stored one                                  |
+| `paypal_test_connection` | JWT       | Prove the credentials authenticate                                                          |
+| `paypal_refund`          | JWT       | `{ order_id, amount?, reason? }` → refund a capture                                         |
 
 The three open routes are open the way `create_order` is, because checkout runs
 for guests. None of them accepts an amount, and the order hash is the only

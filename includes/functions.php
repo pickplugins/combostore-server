@@ -151,6 +151,132 @@ function upload_media_file($data)
 
 
 
+/**
+ * The restricted upload folder, wp-content/uploads/combostore, created on first
+ * use. Files there are for restricted items (paid downloads, licensed
+ * software), so the folder refuses direct web access: Apache/LiteSpeed read
+ * the .htaccess, IIS the web.config, and index.php stops directory listings.
+ * Nginx ignores all three and needs a `location` rule denying the folder.
+ *
+ * @return array|WP_Error ['path' => absolute dir, 'url' => its URL]
+ */
+function combo_store_secure_upload_dir()
+{
+  $uploads = wp_upload_dir(null, false);
+  if (!empty($uploads['error'])) {
+    return new WP_Error('upload_dir', $uploads['error']);
+  }
+
+  $path = trailingslashit($uploads['basedir']) . 'combostore';
+  $url  = trailingslashit($uploads['baseurl']) . 'combostore';
+
+  if (!is_dir($path) && !wp_mkdir_p($path)) {
+    return new WP_Error('upload_dir', 'Could not create the secure upload folder.');
+  }
+
+  $guards = array(
+    '.htaccess'  => "# ComboStore secure uploads: no direct access.\n<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n\tOrder deny,allow\n\tDeny from all\n</IfModule>\nOptions -Indexes\n",
+    'web.config' => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n  <system.webServer>\n    <authorization>\n      <deny users=\"*\" />\n    </authorization>\n  </system.webServer>\n</configuration>\n",
+    'index.php'  => "<?php\n// Silence is golden.\n",
+  );
+
+  foreach ($guards as $name => $contents) {
+    if (!file_exists("$path/$name")) {
+      file_put_contents("$path/$name", $contents);
+    }
+  }
+
+  return array('path' => $path, 'url' => $url);
+}
+
+
+/**
+ * Upload a file into the secure folder (see combo_store_secure_upload_dir).
+ *
+ * Same input and response as upload_media_file, plus `secure` and `path`
+ * (relative to the uploads folder). The file name gets a random prefix, so a
+ * restricted file cannot be found by guessing its name on a server where the
+ * deny rules do not apply. It is recorded as an attachment marked
+ * `_combostore_secure`, without thumbnails (they would sit in the same folder
+ * and be just as unreachable).
+ *
+ * @return array|WP_Error
+ */
+function upload_secure_media_file($data)
+{
+  if (empty($data['tmp_name'])) {
+    return new WP_Error('no_file', 'No file was uploaded.');
+  }
+
+  $dir = combo_store_secure_upload_dir();
+  if (is_wp_error($dir)) return $dir;
+
+  if (!function_exists('wp_handle_sideload')) {
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+  }
+
+  $file = array(
+    'error'    => isset($data['error']) ? $data['error'] : 0,
+    'tmp_name' => $data['tmp_name'],
+    'name'     => isset($data['name']) ? $data['name'] : '',
+    'type'     => isset($data['type']) ? $data['type'] : '',
+    'size'     => filesize($data['tmp_name']),
+  );
+
+  /* Point this one upload at the secure folder; ordinary uploads are untouched. */
+  $to_secure_dir = function ($uploads) use ($dir) {
+    $uploads['path']   = $dir['path'];
+    $uploads['url']    = $dir['url'];
+    $uploads['subdir'] = '/combostore';
+    return $uploads;
+  };
+
+  add_filter('upload_dir', $to_secure_dir);
+  $file_return = wp_handle_sideload($file, array(
+    'test_form' => false,
+    'unique_filename_callback' => function ($dir_path, $name, $ext) {
+      $base = sanitize_file_name(pathinfo($name, PATHINFO_FILENAME));
+      $candidate = wp_generate_password(12, false) . '-' . $base . $ext;
+      while (file_exists(trailingslashit($dir_path) . $candidate)) {
+        $candidate = wp_generate_password(12, false) . '-' . $base . $ext;
+      }
+      return $candidate;
+    },
+  ));
+  remove_filter('upload_dir', $to_secure_dir);
+
+  if (!empty($file_return['error'])) {
+    return new WP_Error('upload_failed', $file_return['error']);
+  }
+
+  $filename = $file_return['file'];
+
+  $attach_id = wp_insert_attachment(array(
+    'post_mime_type' => $file_return['type'],
+    'post_title'     => preg_replace('/\.[^.]+$/', '', isset($data['name']) ? $data['name'] : basename($filename)),
+    'post_content'   => '',
+    'post_status'    => 'inherit',
+    'guid'           => $file_return['url'],
+  ), $filename, 0);
+
+  if (is_wp_error($attach_id) || !$attach_id) {
+    wp_delete_file($filename);
+    return new WP_Error('upload_failed', 'The file was saved but could not be added to the media library.');
+  }
+
+  update_post_meta($attach_id, '_combostore_secure', 1);
+
+  return array(
+    'id'     => $attach_id,
+    'url'    => $file_return['url'],
+    'title'  => isset($data['name']) ? $data['name'] : basename($filename),
+    'secure' => true,
+    'path'   => 'combostore/' . basename($filename),
+  );
+}
+
+
+
 
 
 

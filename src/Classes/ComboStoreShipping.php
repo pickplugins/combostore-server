@@ -986,6 +986,18 @@ class ComboStoreShipping
 
 
 
+        /*
+     * ---------------------------------------------------------
+     * 5. Shipping classes: with the cart's `items` ([{ product_id,
+     *    variation_id }]) and `subtotal`, each method gets class_rates,
+     *    class_charge and total (ComboStoreShippingClasses). The classes come
+     *    from the products themselves, not from the request.
+     * ---------------------------------------------------------
+     */
+        $items = isset($params['items']) && is_array($params['items']) ? $params['items'] : [];
+        $subtotal = isset($params['subtotal']) ? max(0, (float) $params['subtotal']) : 0;
+        $available_methods = ComboStoreShippingClasses::with_class_charges($available_methods, $items, $subtotal);
+
         $response['methods'] = $available_methods;
 
         return $response;

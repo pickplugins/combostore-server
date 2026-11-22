@@ -12,6 +12,8 @@ class SteadfastCourier
     private $secret_key;
     private $base_url = "https://portal.packzy.com/api/v1";
 
+    private static $hooks_added = false;
+
     public function __construct()
     {
 
@@ -24,8 +26,13 @@ class SteadfastCourier
         $this->api_key = isset($steadfast['api_key']) ? $steadfast['api_key'] : '';
         $this->secret_key = isset($steadfast['secret_key']) ? $steadfast['secret_key'] : '';
 
-        add_filter('couriers_webhook_steadfast', array($this, 'couriers_webhook_steadfast'));
-        add_filter('cstore_send_to_courier_steadfast', array($this, 'cstore_send_to_courier_steadfast'));
+        // Once per request: ComboStoreRest also does `new SteadfastCourier()`,
+        // and a second registration would run the send/webhook filter twice.
+        if (!self::$hooks_added) {
+            self::$hooks_added = true;
+            add_filter('couriers_webhook_steadfast', array($this, 'couriers_webhook_steadfast'));
+            add_filter('cstore_send_to_courier_steadfast', array($this, 'cstore_send_to_courier_steadfast'));
+        }
     }
 
     /**

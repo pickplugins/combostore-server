@@ -8,6 +8,7 @@ use ComboStore\Classes\ComboStoreObjectMeta;
 use ComboStore\Classes\ComboStoreSubscriptions;
 use ComboStore\Classes\ComboStoreRegister;
 use ComboStore\Classes\ComboStoreDeliveries;
+use ComboStore\Classes\ComboStoreLicenses;
 use DateTime;
 
 if (!defined('ABSPATH')) exit;  // if direct access
@@ -227,54 +228,14 @@ class ComboStoreOrders
 
 
 
-        if ($subscription_enable) {
-
-            if ($subscription_interval == 'day') {
-                $currentDate = new DateTime("2025-09-13");
-                $daysToAdd = 1 * $subscription_interval_count;
-                $currentDate->modify("+{$daysToAdd} days");
-
-                $next_billing_date = $currentDate->format("Y-m-d");
-            }
-            if ($subscription_interval == 'week') {
-                $currentDate = new DateTime("2025-09-13");
-                $daysToAdd = 7 * $subscription_interval_count;
-                $currentDate->modify("+{$daysToAdd} days");
-
-                $next_billing_date = $currentDate->format("Y-m-d");
-            }
-            if ($subscription_interval == 'month') {
-                $currentDate = new DateTime("2025-09-13");
-                $daysToAdd = 30 * $subscription_interval_count;
-                $currentDate->modify("+{$daysToAdd} days");
-
-                $next_billing_date = $currentDate->format("Y-m-d");
-            }
-            if ($subscription_interval == 'year') {
-                $currentDate = new DateTime("2025-09-13");
-                $daysToAdd = 365 * $subscription_interval_count;
-                $currentDate->modify("+{$daysToAdd} days");
-
-                $next_billing_date = $currentDate->format("Y-m-d");
-            }
-
-
-            $sub_params = [];
-            $sub_params['user_id'] =  $user_id;
-            $sub_params['order_id'] =  $order_id;
-            $sub_params['status'] =  "active";
-            $sub_params['next_billing_date'] =  $next_billing_date;
-            $sub_params['renewal_interval'] =  $subscription_interval;
-            $sub_params['interval_count'] =  $subscription_interval_count;
-            $sub_params['last_payment_amount'] =  $subscription_interval_count;
-            $sub_params['total_amount'] =  $total_amount;
-            $sub_params['subtotal_amount'] =  $subtotal_amount;
-
-
-
-            $ComboStoreSubscriptions = new ComboStoreSubscriptions();
-            $subscription_response = $ComboStoreSubscriptions->create_subscription($sub_params);
-        }
+        /*
+            Subscriptions are per product now: a line bought with "Subscribe"
+            becomes a subscription when the order is paid or completed (see
+            fulfil_order / ComboStoreSubscriptions::generate_order_subscriptions).
+            The old whole-order subscription that was created here - with a
+            next billing date counted from a hard-coded 2025-09-13 - is gone;
+            a `subscription` param from an old checkout is ignored.
+        */
 
 
         $userData = get_user_by("ID", $user_id);
@@ -286,6 +247,11 @@ class ComboStoreOrders
                 "order_id" => $order_id,
                 "email" => isset($userData->user_email) ? $userData->user_email : '',
                 "name" => isset($userData->display_name) ? $userData->display_name : '',
+                /* The checkout's affiliate referral, credited by ComboStoreAffiliates. */
+                "affiliate_ref" => isset($params['affiliate_ref']) ? sanitize_text_field($params['affiliate_ref']) : '',
+                "affiliate_click_id" => isset($params['affiliate_click_id']) ? absint($params['affiliate_click_id']) : 0,
+                /* The checkout's "updates on WhatsApp" box, recorded as consent by ComboStoreMarketing. */
+                "whatsapp_optin" => !empty($params['whatsapp_optin']),
             ],
         );
 
@@ -304,9 +270,16 @@ class ComboStoreOrders
 
             $this->insert_order_items($prams);
 
+            /* An order placed as completed or already paid (e.g. a dashboard order)
+               gets its license keys and subscriptions now; otherwise update_order /
+               the payment gateway does it when it is completed or paid. */
+            $fulfilled = $this->fulfil_order($order_id);
+
             $response['success'] = true;
             $response['order_id'] = $order_id;
             $response['order_hash'] = $order_id_hash;
+            $response['licenses'] = $fulfilled['licenses'];
+            $response['subscriptions'] = $fulfilled['subscriptions'];
 
             do_action("combo_store_order_created", $action_prams);
         }
@@ -371,7 +344,11 @@ class ComboStoreOrders
         $status     = isset($prams['status']) ? sanitize_text_field($prams['status']) : "";
         $payment_method     = isset($prams['payment_method']) ? sanitize_text_field($prams['payment_method']) : "";
         $payment_status     = isset($prams['payment_status']) ? sanitize_text_field($prams['payment_status']) : "";
-        $product_id     = isset($prams['product_id']) ? sanitize_text_field($prams['product_id']) : "";
+        /* The Orders screen sends the picked product as `product: { id, title }`;
+           only `product_id` was read, so the product filter did nothing. */
+        $product = isset($prams['product']) ? (array) $prams['product'] : [];
+        $product_id = !empty($prams['product_id']) ? absint($prams['product_id']) : (isset($product['id']) ? absint($product['id']) : 0);
+        $table_variations = $GLOBALS['wpdb']->prefix . 'cstore_products_variations';
         $customer     = isset($prams['customer']) ? ($prams['customer']) : [];
 
         $customer_id = isset($customer['id']) ? $customer['id'] : "";
@@ -432,13 +409,22 @@ class ComboStoreOrders
 
 
             if (!empty($product_id)) {
+                /* The picked id may be a product or one of its variations (the
+                   picker offers both). A line matches when it is that product
+                   or variation, or a variation of that product - including
+                   older lines that stored the variation id as product_id. */
                 $where[] = "EXISTS (
                     SELECT 1 FROM {$table_order_items} oi
                     WHERE oi.order_id = {$table_orders}.id
-                    AND oi.product_id = %d
+                    AND (
+                        oi.product_id = %d
+                        OR oi.variation_id = %d
+                        OR oi.variation_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                        OR oi.product_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                    )
                 )";
 
-                $params[] = $product_id;
+                array_push($params, $product_id, $product_id, $product_id, $product_id);
             }
 
             $where_sql = '';
@@ -539,13 +525,22 @@ class ComboStoreOrders
 
 
             if (!empty($product_id)) {
+                /* The picked id may be a product or one of its variations (the
+                   picker offers both). A line matches when it is that product
+                   or variation, or a variation of that product - including
+                   older lines that stored the variation id as product_id. */
                 $where[] = "EXISTS (
                     SELECT 1 FROM {$table_order_items} oi
                     WHERE oi.order_id = {$table_orders}.id
-                    AND oi.product_id = %d
+                    AND (
+                        oi.product_id = %d
+                        OR oi.variation_id = %d
+                        OR oi.variation_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                        OR oi.product_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                    )
                 )";
 
-                $params[] = $product_id;
+                array_push($params, $product_id, $product_id, $product_id, $product_id);
             }
 
             $where_sql = '';
@@ -638,13 +633,22 @@ class ComboStoreOrders
 
 
             if (!empty($product_id)) {
+                /* The picked id may be a product or one of its variations (the
+                   picker offers both). A line matches when it is that product
+                   or variation, or a variation of that product - including
+                   older lines that stored the variation id as product_id. */
                 $where[] = "EXISTS (
                     SELECT 1 FROM {$table_order_items} oi
                     WHERE oi.order_id = {$table_orders}.id
-                    AND oi.product_id = %d
+                    AND (
+                        oi.product_id = %d
+                        OR oi.variation_id = %d
+                        OR oi.variation_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                        OR oi.product_id IN (SELECT v.id FROM {$table_variations} v WHERE v.product_id = %d)
+                    )
                 )";
 
-                $params[] = $product_id;
+                array_push($params, $product_id, $product_id, $product_id, $product_id);
             }
 
             $where_sql = '';
@@ -696,9 +700,21 @@ class ComboStoreOrders
 
             $total = (int) $wpdb->get_var($count_query);
         } else {
-            $entries = $wpdb->get_results("SELECT * FROM $table_orders WHERE userid='$user_id' ORDER BY created_at $order limit $offset, $per_page");
-            $total = $wpdb->get_var("SELECT COUNT(`id`) FROM $table_orders WHERE userid='$user_id'");
+            /* A customer's own orders. `order` came from the request and went
+               straight into ORDER BY, so it is whitelisted; the rest is bound. */
+            $order = strtoupper((string) $order) === 'ASC' ? 'ASC' : 'DESC';
+            $entries = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table_orders WHERE userid = %d ORDER BY created_at $order LIMIT %d, %d",
+                absint($user_id),
+                absint($offset),
+                absint($per_page)
+            ));
+            $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(`id`) FROM $table_orders WHERE userid = %d", absint($user_id)));
         }
+
+        /* Customers (and any role that is not store staff) never see what the
+           store paid or earned. */
+        $hide_private = !in_array($user_role, ['administrator', 'store_manager', 'support_agent'], true);
 
 
 
@@ -722,6 +738,10 @@ class ComboStoreOrders
             $entries[$key]->delivery = $ComboStoreDeliveries->get_delivery($entry->id);
             $entries[$key]->order_items = $ComboStoreOrders->get_order_items($entry->id);
             $entries[$key]->phones = $phones;
+
+            if ($hide_private) {
+                $entries[$key] = $this->strip_private_order_fields($entries[$key]);
+            }
         }
 
 
@@ -739,6 +759,45 @@ class ComboStoreOrders
 
 
         return $responses;
+    }
+
+
+    /* Order and line-item fields only store staff may see: what the store
+       paid for the goods and what it made on the order. */
+    const PRIVATE_ORDER_FIELDS = ['trade_price', 'gross_profit', 'net_profit'];
+    const PRIVATE_ITEM_FIELDS = ['trade_price'];
+
+    /**
+     * Remove the store's cost and profit from an order (object or array) and
+     * its `order_items` / `line_items`, for responses to customers and guests.
+     */
+    function strip_private_order_fields($order)
+    {
+        if (!$order) return $order;
+
+        $strip = function ($row, $fields) {
+            foreach ($fields as $field) {
+                if (is_array($row)) unset($row[$field]);
+                elseif (is_object($row)) unset($row->$field);
+            }
+            return $row;
+        };
+
+        $order = $strip($order, self::PRIVATE_ORDER_FIELDS);
+
+        foreach (['order_items', 'line_items'] as $list) {
+            $items = is_array($order) ? ($order[$list] ?? null) : ($order->$list ?? null);
+            if (!is_array($items)) continue;
+
+            $items = array_map(function ($item) use ($strip) {
+                return $strip($item, self::PRIVATE_ITEM_FIELDS);
+            }, $items);
+
+            if (is_array($order)) $order[$list] = $items;
+            else $order->$list = $items;
+        }
+
+        return $order;
     }
 
 
@@ -1007,12 +1066,17 @@ class ComboStoreOrders
 
 
 
-                $prams = [
-                    "order_id" => $order_id,
-                    "cartItems" => $lineItems,
-                ];
+                /* Only when the caller sent lineItems: update_order_items deletes
+                   every item first, so a status-only update (courier webhooks)
+                   used to wipe the order. An explicit [] still clears it. */
+                if ($lineItems !== null) {
+                    $prams = [
+                        "order_id" => $order_id,
+                        "cartItems" => $lineItems,
+                    ];
 
-                $this->update_order_items($prams);
+                    $this->update_order_items($prams);
+                }
 
                 /* After the items are saved, so it counts what was just stored. */
                 if ($status == 'completed') {
@@ -1034,6 +1098,12 @@ class ComboStoreOrders
 
                     $responses['stock_notes'] = array_merge($notes, $restock['skipped']);
                 }
+
+                /* After the items are saved. Reads the stored row, so marking the
+                   order paid without touching its status also issues them. */
+                $fulfilled = $this->fulfil_order($order_id);
+                $responses['licenses'] = $fulfilled['licenses'];
+                $responses['subscriptions'] = $fulfilled['subscriptions'];
 
                 do_action("combo_store_order_updated", $action_prams);
             } else {
@@ -1498,6 +1568,8 @@ class ComboStoreOrders
                         $this->update_order_items($prams);
                     }
 
+                    $this->fulfil_order($order_id);
+
 
                     //do_action("combo_store_order_updated", $action_prams);
 
@@ -1516,6 +1588,63 @@ class ComboStoreOrders
 
 
 
+
+    /**
+     * A line's `meta` column, JSON-encoded once.
+     *
+     * The dashboard sends back lines it read from get_order, whose meta is
+     * already a JSON string; encoding that again nested it one level deeper on
+     * every save. A cart line's `purchase_type` ("subscription" when the
+     * customer chose Subscribe) is kept in the meta.
+     */
+    function line_meta_json($cartItem)
+    {
+        $meta = isset($cartItem['meta']) ? $cartItem['meta'] : null;
+
+        for ($i = 0; $i < 3 && is_string($meta); $i++) {
+            $decoded = json_decode($meta, true);
+            if ($decoded === null) break;
+            $meta = $decoded;
+        }
+
+        if (!empty($cartItem['purchase_type'])) {
+            $meta = is_array($meta) ? $meta : [];
+            $meta['purchase_type'] = sanitize_key($cartItem['purchase_type']);
+        }
+
+        return ($meta === null || $meta === '' || $meta === []) ? null : wp_json_encode($meta);
+    }
+
+
+    /**
+     * A line's subtotal (price × quantity) and total (subtotal − discount +
+     * tax), worked out when the caller did not send them. The storefront cart
+     * sends neither, so every product line was saved with 0.00 for both; the
+     * dashboard's order editor sends a total but no subtotal. Amounts that
+     * were sent (non-zero) are kept.
+     *
+     * The discount follows the order editor (OrderUpdate.jsx): "percent" is
+     * a percentage of price × quantity, "fixed" an amount off the line.
+     *
+     * @return float[] [subtotal, total]
+     */
+    function line_amounts($price, $quantity, $subtotal, $total, $discount_amount = 0, $tax = 0, $discount_type = '')
+    {
+        $gross = floatval($price) * max(0, intval($quantity));
+        if ($subtotal <= 0) {
+            $subtotal = round($gross, 2);
+        }
+        if ($total <= 0) {
+            $discount = floatval($discount_amount);
+            if ($discount_type === 'percent') {
+                $discount = $gross * $discount / 100;
+            } elseif ($discount_type !== 'fixed') {
+                $discount = 0;
+            }
+            $total = round(max(0, $gross - $discount + floatval($tax)), 2);
+        }
+        return [$subtotal, $total];
+    }
 
     function insert_order_items($prams)
     {
@@ -1537,7 +1666,9 @@ class ComboStoreOrders
         $table = $wpdb->prefix . "cstore_order_items";
 
         foreach ($cartItems as $cartItem) {
-            $product_id    = isset($cartItem['id']) ? intval($cartItem['id']) : 0;
+            /* The cart's `id` is only a cart key; product_id is the product (for a
+               variation, its parent). Older carts sent only `id`. */
+            $product_id    = !empty($cartItem['product_id']) ? intval($cartItem['product_id']) : (isset($cartItem['id']) ? intval($cartItem['id']) : 0);
             $variation_id    = isset($cartItem['variation_id']) ? intval($cartItem['variation_id']) : 0;
             $product_name  = isset($cartItem['title']) ? sanitize_text_field($cartItem['title']) : '';
             $sku           = isset($cartItem['sku']) ? sanitize_text_field($cartItem['sku']) : '';
@@ -1550,7 +1681,8 @@ class ComboStoreOrders
             $discount_amount = isset($cartItem['discount_amount']) ? floatval($cartItem['discount_amount']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
             $attributes          = isset($cartItem['attributes']) ? wp_json_encode($cartItem['attributes']) : null;
-            $meta          = isset($cartItem['meta']) ? wp_json_encode($cartItem['meta']) : null;
+            $meta          = $this->line_meta_json($cartItem);
+            list($subtotal, $total) = $this->line_amounts($price, $quantity, $subtotal, $total, $discount_amount, $tax, $discount_type);
 
             // Insert data
             $data = array(
@@ -1581,9 +1713,9 @@ class ComboStoreOrders
                 '%f', // price
                 '%f', // trade_price
                 '%f', // subtotal
+                '%f', // tax
                 '%s', // discount_type
                 '%f', // discount_amount
-                '%f', // tax
                 '%f', // total
                 '%s',  // attributes (JSON string)
                 '%s'  // meta (JSON string)
@@ -1642,7 +1774,8 @@ class ComboStoreOrders
             $discount_amount = isset($cartItem['discount_amount']) ? floatval($cartItem['discount_amount']) : 0.00;
             $total         = isset($cartItem['total']) ? floatval($cartItem['total']) : 0.00;
             $attributes          = isset($cartItem['attributes']) ? wp_json_encode($cartItem['attributes']) : null;
-            $meta          = isset($cartItem['meta']) ? wp_json_encode($cartItem['meta']) : null;
+            $meta          = $this->line_meta_json($cartItem);
+            list($subtotal, $total) = $this->line_amounts($price, $quantity, $subtotal, $total, $discount_amount, $tax, $discount_type);
 
 
 
@@ -1891,6 +2024,42 @@ class ComboStoreOrders
         return  $object_id;
     }
 
+
+
+    /**
+     * Issue the order's license keys if it is completed or paid. Does nothing
+     * for orders without licensed products, and never issues the same key twice
+     * (see ComboStoreLicenses::generate_order_licenses).
+     *
+     * @return array Created license ids and keys.
+     */
+    /**
+     * Everything a completed or paid order unlocks: license keys (renewed on a
+     * renewal order) and subscriptions (started, or marked paid on a renewal).
+     * Does nothing for an order that is neither; safe to call repeatedly.
+     *
+     * @return array ['licenses' => [..], 'subscriptions' => [ids]]
+     */
+    function fulfil_order($order_id)
+    {
+        $licenses = $this->issue_order_licenses($order_id);
+
+        $ComboStoreSubscriptions = new ComboStoreSubscriptions();
+        $subscriptions = $ComboStoreSubscriptions->generate_order_subscriptions($order_id);
+
+        return ['licenses' => $licenses, 'subscriptions' => $subscriptions['created']];
+    }
+
+
+    function issue_order_licenses($order_id)
+    {
+        $ComboStoreLicenses = new ComboStoreLicenses();
+        $result = $ComboStoreLicenses->generate_order_licenses($order_id);
+
+        return array_map(function ($license) {
+            return ['id' => $license->id, 'license_key' => $license->license_key, 'product_id' => $license->product_id];
+        }, $result['created']);
+    }
 
 
     function add_order_note($args)

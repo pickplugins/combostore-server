@@ -1,462 +1,275 @@
 <?php
 if (! defined('ABSPATH')) exit;  // if direct access
 
-use ComboStore\Classes\ComboStoreProduct;
-use ComboStore\Classes\PathaoCourier;
 use ComboStore\Classes\ComboStoreOrders;
 use ComboStore\Classes\ComboStoreDeliveries;
-use ComboStore\Classes\RedxCourier;
-use ComboStore\Classes\Courrierfast;
+
+/*
+ * Sending orders to couriers (cstore_send_to_courier_<id>) lives in each
+ * courier class: SteadfastCourier, PathaoCourier, RedxCourier, Courrierfast,
+ * CarrybeeCourier, PaperflyCourier. They are created in combo-store-server.php.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Courier webhooks                                                    */
+/*                                                                     */
+/* Every courier posts to the dashboard's /api/couriers-webhook, which  */
+/* forwards to combo-store/v2/couriers_webhook. ComboStoreRest works    */
+/* out which courier it is (?courier=<id>, X-Combo-Courier, or the      */
+/* courier's own fingerprint) and fires couriers_webhook_<id> with the  */
+/* body plus $data['authorization'] and $data['_webhook'] (headers,     */
+/* query, raw body). Each handler is a couriers_webhook_<id> method   */
+/* on its courier class; the shared steps below do the actual work.    */
+/*                                                                     */
+/* Each courier's token is settings.couriers.<id>.webhook_auth_token.   */
+/* It can arrive as the Authorization header, the courier's signature   */
+/* header, or ?token= in the webhook URL.                               */
+/* ------------------------------------------------------------------ */
 
 
 
-
-add_filter("cstore_send_to_courier_pathao", "cstore_send_to_courier_pathao");
-
-function cstore_send_to_courier_pathao($data)
+/** True when the request carries this courier's webhook token. */
+function cstore_courier_webhook_authorized($courier, $data, $signature_headers = [])
 {
+    $settings = get_option('combo_store_settings', []);
+    $courier_settings = $settings['couriers'][$courier] ?? [];
+    // CourrierFast's panel had its own "webhook_secret" field before this one.
+    $token = trim((string) ($courier_settings['webhook_auth_token'] ?? ''));
+    if ($token === '') {
+        $token = trim((string) ($courier_settings['webhook_secret'] ?? ''));
+    }
 
-    $combo_store_settings = get_option('combo_store_settings');
-    $courier = isset($combo_store_settings['courier']) ? $combo_store_settings['courier'] : [];
-    $pathao = isset($courier['pathao']) ? $courier['pathao'] : [];
-    $store_id = isset($pathao['store_id']) ? $pathao['store_id'] : '';
+    // No token set means no webhook: never accept unauthenticated updates.
+    if ($token === '') {
+        return false;
+    }
 
+    $meta = isset($data['_webhook']) && is_array($data['_webhook']) ? $data['_webhook'] : [];
+    $headers = $meta['headers'] ?? [];
+    $candidates = [];
 
-    $response = [];
-    $order_id = isset($data['order_id']) ? $data['order_id'] : '';
-    $item_type = isset($data['item_type']) ? $data['item_type'] : 2;
-    $delivery_type = isset($data['delivery_type']) ? $data['delivery_type'] : '48';
+    $authorization = trim((string) ($data['authorization'] ?? ''));
+    if ($authorization !== '') {
+        $candidates[] = $authorization;
+        $candidates[] = trim(preg_replace('/^(Bearer|Token)\s+/i', '', $authorization));
+    }
 
-    if ($order_id) {
-
-        $ComboStoreProduct = new ComboStoreProduct();
-        $ComboStoreOrders = new ComboStoreOrders();
-
-        $orderData = $ComboStoreOrders->get_order($order_id);
-
-
-
-
-        $order_items = isset($orderData['order_items']) ? $orderData['order_items'] : [];
-
-        $item_description = '';
-
-        $total_weight = 0;
-        $total_quantity = 0;
-
-        foreach ($order_items as $order_item) {
-            $product_id  = isset($order_item->product_id) ? $order_item->product_id : '';
-            $product_name  = get_the_title($product_id);
-
-            $get_product = $ComboStoreProduct->get_product(['product_id' => $product_id,]);
-            $quantity  = isset($order_item->quantity) ? $order_item->quantity : '';
-            $weight = $get_product->weight ?? 0;
-
-
-
-            $total_weight += $get_product->weight ?? 0;
-            $total_weight = $weight * $quantity;
-            $price  = isset($order_item->price) ? $order_item->price : '';
-
-            $total_quantity += $quantity;
-
-            $product_name = html_entity_decode($product_name);
-            $product_name = trim(preg_replace('/\s+/', ' ', $product_name));
-
-            $item_description .= $product_name . ' X ' . $quantity . ',';
-        }
-
-
-        $PathaoCourier = new PathaoCourier();
-
-        $order = [
-            "store_id" => $store_id,
-            "merchant_order_id" => $order_id,
-            "recipient_name" => $orderData['billing_name'],
-            "recipient_phone" => $orderData['billing_phone'],
-            "recipient_email" => $orderData['billing_email'],
-            "recipient_address" => $orderData['billing_address'],
-            "amount_to_collect" => $orderData['total_amount'],
-            "item_weight" => $total_weight,
-            "item_quantity" => $total_quantity,
-            "item_type" => $item_type,
-            "note" => '',
-            "item_description" => $item_description,
-            "delivery_type" => $delivery_type,
-        ];
-
-
-        // $order = [
-        //     "store_id" => 12345,
-        //     "merchant_order_id" => "INV-1001",
-        //     "recipient_name" => "Demo Customer",
-        //     "recipient_phone" => "017XXXXXXXX",
-        //     "recipient_address" => "Uttara Sector 10, Dhaka",
-        //     "delivery_type" => 48,
-        //     "item_type" => 2,
-        //     "special_instruction" => "Call before delivery",
-        //     "item_quantity" => 1,
-        //     "item_weight" => "0.5",
-        //     "item_description" => "T-shirt",
-        //     "amount_to_collect" => 900
-        // ];
-
-
-
-        $pathao_response = $PathaoCourier->createOrder($order);
-
-
-        error_log(wp_json_encode($pathao_response));
-
-        $type = isset($pathao_response['type']) ? $pathao_response['type'] : false;
-
-        if ($type == 'success') {
-
-            $data = isset($pathao_response['data']) ? $pathao_response['data'] : [];
-
-            error_log(wp_json_encode($data));
-
-
-
-            $consignment_id   = isset($data['consignment_id']) ? $data['consignment_id'] : '';
-
-            $tracking_code   = isset($consignment['tracking_code']) ? $consignment['tracking_code'] : '';
-
-            $response['status'] = 'success';
-            $response['message'] = 'Order sent to courier successfully';
-            $response['consignment_id'] = $consignment_id;
-            $response['tracking_code'] = $tracking_code;
-
-            $ComboStoreDeliveries = new ComboStoreDeliveries();
-
-            $newDelivery = [
-                'customer_id' => $orderData['userid'],
-                'order_id' => $order_id,
-                'rider_id' => '',
-                'status' => 'started',
-                'courier' => 'pathao',
-                'consignment_id' => $consignment_id,
-                'tracking_code' => $tracking_code,
-                'courier_data' => $data,
-            ];
-
-            error_log(wp_json_encode($newDelivery));
-
-            $new_delivery = $ComboStoreDeliveries->create_delivery($newDelivery);
-        } else {
-
-            $errors = [];
-
-            $response['success'] = false;
-            $response['message'] = 'Order sent to courier failed';
-            $response['errors'] = $errors;
-            return $response;
+    foreach ($signature_headers as $header) {
+        $value = trim((string) ($headers[$header] ?? ''));
+        if ($value !== '') {
+            $candidates[] = $value;
         }
     }
+
+    $query_token = trim((string) ($meta['query']['token'] ?? ''));
+    if ($query_token !== '') {
+        $candidates[] = $query_token;
+    }
+
+    // Signature headers may hold the secret itself or an HMAC-SHA256 of the body.
+    $raw = (string) ($meta['raw'] ?? '');
+    $hmac_hex = hash_hmac('sha256', $raw, $token);
+    $hmac_b64 = base64_encode(hash_hmac('sha256', $raw, $token, true));
+
+    foreach ($candidates as $candidate) {
+        $candidate = (string) $candidate;
+        if (hash_equals($token, $candidate) || hash_equals($hmac_hex, strtolower($candidate)) || hash_equals($hmac_b64, $candidate)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+/** First non-empty value among $keys (dot paths allowed, e.g. "data.status"). */
+function cstore_courier_webhook_pick($data, $keys)
+{
+    foreach ($keys as $key) {
+        $value = $data;
+        foreach (explode('.', $key) as $part) {
+            if (!is_array($value) || !array_key_exists($part, $value)) {
+                $value = null;
+                break;
+            }
+            $value = $value[$part];
+        }
+        if (is_scalar($value) && trim((string) $value) !== '') {
+            return trim((string) $value);
+        }
+    }
+    return '';
+}
+
+
+/** Courier status → ComboStore order status ('' = leave the order status alone). */
+function cstore_courier_webhook_order_status($courier, $courier_status)
+{
+    // "order.in-transit", "In Transit", "in_transit" all become "in-transit".
+    $key = strtolower(trim((string) $courier_status));
+    $key = preg_replace('/^order\./', '', $key);
+    $key = trim(preg_replace('/[\s_]+/', '-', $key), '-');
+
+    $map = [
+        'picked'                    => 'processing',
+        'picked-up'                 => 'processing',
+        'pickup-done'               => 'processing',
+        'at-the-sorting-hub'        => 'processing',
+        'in-transit'                => 'processing',
+        'received-at-last-mile-hub' => 'processing',
+        'assigned-for-delivery'     => 'processing',
+        'ready-for-delivery'        => 'processing',
+        'delivery-in-progress'      => 'processing',
+        'out-for-delivery'          => 'processing',
+        'delivered'                 => 'delivered',
+        'on-hold'                   => 'hold',
+        'hold'                      => 'hold',
+        'agent-hold'                => 'hold',
+        'delivery-failed'           => 'failed',
+        'failed'                    => 'failed',
+        'returned'                  => 'returned',
+        'paid-return'               => 'returned',
+        'return-received'           => 'returned',
+        'cancelled'                 => 'canceled',
+        'canceled'                  => 'canceled',
+        'pickup-cancelled'          => 'canceled',
+    ];
+
+    $status = $map[$key] ?? '';
+
+    return apply_filters('cstore_courier_webhook_order_status', $status, $courier_status, $courier);
+}
+
+
+/** The order this delivery belongs to, only if we sent it with this courier. */
+function cstore_courier_webhook_find_order($courier, $order_ref, $consignment_id)
+{
+    global $wpdb;
+    $table = $wpdb->prefix . 'cstore_deliveries';
+
+    if ($consignment_id !== '') {
+        $order_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT order_id FROM $table WHERE courier = %s AND consignment_id = %s ORDER BY id DESC LIMIT 1",
+            $courier,
+            $consignment_id
+        ));
+        if ($order_id) {
+            return (int) $order_id;
+        }
+    }
+
+    $order_ref = absint(preg_replace('/\D/', '', (string) $order_ref));
+    if ($order_ref) {
+        $order_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT order_id FROM $table WHERE courier = %s AND order_id = %d ORDER BY id DESC LIMIT 1",
+            $courier,
+            $order_ref
+        ));
+        if ($order_id) {
+            return (int) $order_id;
+        }
+    }
+
+    return 0;
+}
+
+
+/**
+ * Shared webhook flow: authorise, find the order, log tracking, move the
+ * order status, add an order note.
+ *
+ * $opts: signature_headers, order_keys, consignment_keys, status_keys,
+ * message_keys, ignore_statuses (handshake/test events), http_status,
+ * http_headers (added to every response).
+ */
+function cstore_courier_webhook_handle($courier, $data, $opts)
+{
+    $label = ucfirst($courier);
+    $base  = [
+        '_http_status'  => $opts['http_status'] ?? 200,
+        '_http_headers' => $opts['http_headers'] ?? [],
+    ];
+
+    if (!cstore_courier_webhook_authorized($courier, $data, $opts['signature_headers'] ?? [])) {
+        return array_merge($base, [
+            '_http_status' => 401,
+            'error'        => true,
+            'message'      => 'authorization failed',
+        ]);
+    }
+
+    $courier_status = cstore_courier_webhook_pick($data, $opts['status_keys'] ?? ['status']);
+
+    if (in_array(strtolower($courier_status), $opts['ignore_statuses'] ?? [], true)) {
+        return $base + ['success' => true, 'message' => 'webhook integration ok'];
+    }
+
+    $consignment_id = cstore_courier_webhook_pick($data, $opts['consignment_keys'] ?? ['consignment_id']);
+    $order_ref      = cstore_courier_webhook_pick($data, $opts['order_keys'] ?? ['order_id']);
+    $message        = cstore_courier_webhook_pick($data, $opts['message_keys'] ?? ['message']);
+
+    $order_id = cstore_courier_webhook_find_order($courier, $order_ref, $consignment_id);
+
+    if (!$order_id) {
+        // 2xx so the courier does not retry forever for a parcel we never sent.
+        return $base + [
+            'error'   => true,
+            'message' => 'No ' . $label . ' delivery found for this consignment',
+        ];
+    }
+
+    $response = $base + ['order_id' => $order_id];
+
+    (new ComboStoreDeliveries())->insert_tracking([
+        'order_id'       => $order_id,
+        'status'         => $courier_status,
+        'consignment_id' => $consignment_id,
+        'latlng'         => null,
+        'notes'          => $message,
+    ]);
+    $response['tracking'] = true;
+
+    $order_status = cstore_courier_webhook_order_status($courier, $courier_status);
+
+    if ($order_status !== '') {
+        global $wpdb;
+        $current = (string) $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM {$wpdb->prefix}cstore_orders WHERE id = %d",
+            $order_id
+        ));
+
+        // A late courier event must not undo a finished order.
+        $locked = apply_filters('cstore_courier_webhook_locked_statuses', ['completed', 'refunded'], $courier);
+
+        if ($current !== $order_status && !in_array($current, $locked, true)) {
+            (new ComboStoreOrders())->update_order([
+                'id'     => $order_id,
+                'status' => $order_status,
+            ]);
+            $response['order'] = true;
+            $response['order_status'] = $order_status;
+        }
+    }
+
+    if ($courier_status !== '' || $message !== '') {
+        $note = $label . ': ' . ($courier_status !== '' ? $courier_status : 'update');
+        if ($message !== '') {
+            $note .= ' - ' . $message;
+        }
+        if ($consignment_id !== '') {
+            $note .= ' (' . $consignment_id . ')';
+        }
+
+        (new ComboStoreOrders())->add_order_note([
+            'order_id' => $order_id,
+            'note'     => sanitize_text_field($note),
+            'author'   => $label,
+        ]);
+        $response['order_note'] = true;
+    }
+
+    $response['success'] = true;
 
     return $response;
 }
 
-add_filter("cstore_send_to_courier_redx", "cstore_send_to_courier_redx");
-
-function cstore_send_to_courier_redx($data)
-{
-
-    $combo_store_settings = get_option('combo_store_settings');
-    $courier = isset($combo_store_settings['courier']) ? $combo_store_settings['courier'] : [];
-    $redx = isset($courier['redx']) ? $courier['redx'] : [];
-    $store_id = isset($redx['store_id']) ? $redx['store_id'] : '';
-
-
-    $response = [];
-    $order_id = isset($data['order_id']) ? $data['order_id'] : '';
-    $item_type = isset($data['item_type']) ? $data['item_type'] : 2;
-    $delivery_type = isset($data['delivery_type']) ? $data['delivery_type'] : '48';
-
-    if ($order_id) {
-
-        $ComboStoreProduct = new ComboStoreProduct();
-        $ComboStoreOrders = new ComboStoreOrders();
-
-        $orderData = $ComboStoreOrders->get_order($order_id);
-
-
-
-
-        $order_items = isset($orderData['order_items']) ? $orderData['order_items'] : [];
-
-        $item_description = '';
-
-        $total_weight = 0;
-        $total_quantity = 0;
-
-        foreach ($order_items as $order_item) {
-            $product_id  = isset($order_item->product_id) ? $order_item->product_id : '';
-            $product_name  = get_the_title($product_id);
-
-            $get_product = $ComboStoreProduct->get_product(['product_id' => $product_id,]);
-            $quantity  = isset($order_item->quantity) ? $order_item->quantity : '';
-            $weight = $get_product->weight ?? 0;
-
-
-
-            $total_weight += $get_product->weight ?? 0;
-            $total_weight = $weight * $quantity;
-            $price  = isset($order_item->price) ? $order_item->price : '';
-
-            $total_quantity += $quantity;
-
-            $product_name = html_entity_decode($product_name);
-            $product_name = trim(preg_replace('/\s+/', ' ', $product_name));
-
-            $item_description .= $product_name . ' X ' . $quantity . ',';
-        }
-
-
-        $RedxCourier = new RedxCourier();
-
-        $order = [
-            "pickup_store_id" => $store_id,
-            "merchant_invoice_id" => $order_id,
-            "customer_name" => $orderData['billing_name'],
-            "customer_phone" => $orderData['billing_phone'],
-            "recipient_email" => $orderData['billing_email'],
-            "customer_address" => $orderData['billing_address'],
-            "cash_collection_amount" => $orderData['total_amount'],
-            "parcel_weight" => $total_weight,
-            "item_quantity" => $total_quantity,
-            "item_type" => $item_type,
-            "instruction" => '',
-            "item_description" => $item_description,
-            "delivery_type" => $delivery_type,
-        ];
-
-
-        // $order = [
-        //     "store_id" => 12345,
-        //     "merchant_order_id" => "INV-1001",
-        //     "recipient_name" => "Demo Customer",
-        //     "recipient_phone" => "017XXXXXXXX",
-        //     "recipient_address" => "Uttara Sector 10, Dhaka",
-        //     "delivery_type" => 48,
-        //     "item_type" => 2,
-        //     "special_instruction" => "Call before delivery",
-        //     "item_quantity" => 1,
-        //     "item_weight" => "0.5",
-        //     "item_description" => "T-shirt",
-        //     "amount_to_collect" => 900
-        // ];
-
-
-
-        $redx_response = $RedxCourier->createParcel($order);
-
-
-        error_log(wp_json_encode($redx_response));
-
-        $type = isset($redx_response['type']) ? $redx_response['type'] : false;
-
-        if ($type == 'success') {
-
-            $data = isset($redx_response['data']) ? $redx_response['data'] : [];
-
-            error_log(wp_json_encode($data));
-
-
-
-            $consignment_id   = isset($data['consignment_id']) ? $data['consignment_id'] : '';
-
-            $tracking_code   = isset($consignment['tracking_id']) ? $consignment['tracking_id'] : '';
-
-            $response['status'] = 'success';
-            $response['message'] = 'Order sent to courier successfully';
-            $response['consignment_id'] = $consignment_id;
-            $response['tracking_code'] = $tracking_code;
-
-            $ComboStoreDeliveries = new ComboStoreDeliveries();
-
-            $newDelivery = [
-                'customer_id' => $orderData['userid'],
-                'order_id' => $order_id,
-                'rider_id' => '',
-                'status' => 'started',
-                'courier' => 'redx',
-                'consignment_id' => $consignment_id,
-                'tracking_code' => $tracking_code,
-                'courier_data' => $data,
-            ];
-
-            error_log(wp_json_encode($newDelivery));
-
-            $new_delivery = $ComboStoreDeliveries->create_delivery($newDelivery);
-        } else {
-
-            $errors = [];
-
-            $response['success'] = false;
-            $response['message'] = 'Order sent to courier failed';
-            $response['errors'] = $errors;
-            return $response;
-        }
-    }
-
-    return $response;
-}
-
-
-
-
-add_filter("cstore_send_to_courier_courrierfast", "cstore_send_to_courier_courrierfast");
-
-function cstore_send_to_courier_courrierfast($data)
-{
-
-
-    $order_id     = isset($data['order_id']) ? sanitize_text_field($data['order_id']) : "";
-
-    $combo_store_settings = get_option('combo_store_settings');
-    $courier = isset($combo_store_settings['courier']) ? $combo_store_settings['courier'] : [];
-    $courrierfast = isset($courier['courrierfast']) ? $courier['courrierfast'] : [];
-    $store_id = isset($courrierfast['store_id']) ? $courrierfast['store_id'] : '';
-
-
-    $response = [];
-    $order_id = isset($data['order_id']) ? $data['order_id'] : '';
-    $item_type = isset($data['item_type']) ? $data['item_type'] : 2;
-    $deliveryServiceType = isset($data['deliveryServiceType']) ? $data['deliveryServiceType'] : 'regular';
-    $deliveryInstructions = isset($data['deliveryInstructions']) ? $data['deliveryInstructions'] : '';
-
-    if ($order_id) {
-
-        $ComboStoreProduct = new ComboStoreProduct();
-        $ComboStoreOrders = new ComboStoreOrders();
-
-        $orderData = $ComboStoreOrders->get_order($order_id);
-
-
-
-
-        $order_items = isset($orderData['order_items']) ? $orderData['order_items'] : [];
-
-        $item_description = '';
-
-        $total_weight = 0;
-        $total_quantity = 0;
-
-        foreach ($order_items as $order_item) {
-            $product_id  = isset($order_item->product_id) ? $order_item->product_id : '';
-            $product_name  = get_the_title($product_id);
-
-            $get_product = $ComboStoreProduct->get_product(['product_id' => $product_id,]);
-            $quantity  = isset($order_item->quantity) ? $order_item->quantity : '';
-            $weight = $get_product->weight ?? 0;
-
-
-
-            $total_weight += $get_product->weight ?? 1;
-            $total_weight = $weight * $quantity;
-            $price  = isset($order_item->price) ? $order_item->price : '';
-
-            $total_quantity += $quantity;
-
-            $product_name = html_entity_decode($product_name);
-            $product_name = trim(preg_replace('/\s+/', ' ', $product_name));
-
-            $item_description .= $product_name . ' X ' . $quantity . ',';
-        }
-
-
-        $Courrierfast = new Courrierfast();
-
-        $order = [
-            "store" => $store_id,
-            "merchantOrderId" => $order_id,
-            "customerName" => $orderData['billing_name'],
-            "mobileNumber" => $orderData['billing_phone'],
-            "recipient_email" => $orderData['billing_email'],
-            "detailedAddress" => $orderData['billing_address'],
-            "codAmount" => $orderData['total_amount'],
-            "weight" => "$total_weight",
-            "item_quantity" => $total_quantity,
-            "productType" => $item_type,
-            "district" => 'rangpur',
-            "thana" => 'rangpur sadar',
-            "area" => '',
-            "deliveryInstructions" => $deliveryInstructions,
-            "productDetails" => $item_description,
-            "deliveryServiceType" => $deliveryServiceType,
-        ];
-        error_log(wp_json_encode($order));
-
-
-        // $order = [
-        //     "store_id" => 12345,
-        //     "merchant_order_id" => "INV-1001",
-        //     "recipient_name" => "Demo Customer",
-        //     "recipient_phone" => "017XXXXXXXX",
-        //     "recipient_address" => "Uttara Sector 10, Dhaka",
-        //     "delivery_type" => 48,
-        //     "item_type" => 2,
-        //     "special_instruction" => "Call before delivery",
-        //     "item_quantity" => 1,
-        //     "item_weight" => "0.5",
-        //     "item_description" => "T-shirt",
-        //     "amount_to_collect" => 900
-        // ];
-
-
-        //return;
-
-        $redx_response = $Courrierfast->createParcel($order);
-
-        error_log(wp_json_encode($redx_response));
-
-
-        $status = isset($redx_response['status']) ? $redx_response['status'] : false;
-
-        if ($status) {
-
-            $data = isset($redx_response['data']) ? $redx_response['data'] : [];
-
-            error_log(wp_json_encode($data));
-
-
-
-            $consignment_id   = isset($data['consignment_id']) ? $data['consignment_id'] : '';
-
-            $tracking_code   = isset($consignment['tracking_id']) ? $consignment['tracking_id'] : '';
-
-            $response['status'] = 'success';
-            $response['message'] = 'Order sent to courier successfully';
-            $response['consignment_id'] = $consignment_id;
-            $response['tracking_code'] = $tracking_code;
-
-            $ComboStoreDeliveries = new ComboStoreDeliveries();
-
-            $newDelivery = [
-                'customer_id' => $orderData['userid'],
-                'order_id' => $order_id,
-                'rider_id' => '',
-                'status' => 'started',
-                'courier' => 'redx',
-                'consignment_id' => $consignment_id,
-                'tracking_code' => $tracking_code,
-                'courier_data' => $data,
-            ];
-
-            error_log(wp_json_encode($newDelivery));
-
-            $new_delivery = $ComboStoreDeliveries->create_delivery($newDelivery);
-        } else {
-
-            $errors = [];
-
-            $response['success'] = false;
-            $response['message'] = 'Order sent to courier failed';
-            $response['errors'] = $errors;
-            return $response;
-        }
-    }
-
-    return $response;
-}

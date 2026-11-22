@@ -123,6 +123,10 @@ zh-CN
 			curl_setopt($ch, CURLOPT_URL, $host);
 			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 			curl_setopt($ch, CURLOPT_USERAGENT, 'geoPlugin PHP Class v1.1');
+			/* ComboStore: never let a slow lookup hold up the request (activity
+			   logging and the Fraud Checker's country filter at checkout). */
+			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 4);
 			$response = curl_exec($ch);
 			curl_close ($ch);
 			
